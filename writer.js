@@ -154,16 +154,6 @@ function bitsToBuffer(bits){
     }
     return new Uint8Array(data);
 }
-function checkFrames(frames){
-    var width = frames[0].width,
-        height = frames[0].height,
-        duration = frames[0].duration;
-    return {
-        duration: duration,
-        width: width,
-        height: height
-    };
-}
 
 function generateEBML(json){
     var ebml = [];
@@ -397,16 +387,15 @@ var stableMergeSort = function(videoFrames, audioFrames) {
 var Video = function (){
     this.frames = [];
     this.duration = 0;
-    this.globalTime = 0;
     this.height = 0;
     this.width = 0;
     this.add = function(frame, duration){
         var webp = parseWebP(parseRIFF(atob(frame.slice(23))));
-        webp.timecode = this.globalTime;
+        webp.timecode = this.duration;
         webp.type = 0;
         this.width = webp.width;
         this.height = webp.height;
-        this.globalTime += duration;
+        this.duration += duration;
         this.frames.push(webp);
     };
     this.compile = function(){
@@ -429,7 +418,7 @@ var Video = function (){
     }
     this.toWebM = function(){
         var CLUSTER_MAX_DURATION = 30000;
-        var ebml = getEbmlStructure(this.width, this.height, Math.max(this.globalTime, this.audioDuration), this.codecPrivate, this.rate);
+        var ebml = getEbmlStructure(this.width, this.height, Math.max(this.duration, this.audioDuration), this.codecPrivate, this.rate);
         var segment = ebml[1];
         var cues = segment.data[2];
 

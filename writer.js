@@ -244,11 +244,11 @@ var getEbmlStructure = function(width, height, duration, privateData, rate) {
                             "id": 0x2ad7b1 // TimecodeScale
                         },
                         {
-                            "data": "whammy",
+                            "data": "webm-writer",
                             "id": 0x4d80 // MuxingApp
                         },
                         {
-                            "data": "whammy",
+                            "data": "webm-writer",
                             "id": 0x5741 // WritingApp
                         },
                         {

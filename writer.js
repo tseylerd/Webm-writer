@@ -12,7 +12,7 @@ var toFlatArray = function(arr, outBuffer){
         }
     }
     return outBuffer;
-}
+};
 
 var makeSimpleBlock = function(data){
     var flags = 0;
@@ -23,11 +23,10 @@ var makeSimpleBlock = function(data){
     if (data.trackNum > 127) {
         throw "TrackNumber > 127 not supported";
     }
-    var out = [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function(e){
+    return [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function(e){
             return String.fromCharCode(e)
         }).join('') + data.frame;
-    return out;
-}
+};
 
 function parseWebP(riff){
     var VP8 = riff.RIFF[0].WEBP[0];
@@ -106,8 +105,8 @@ function doubleToString32(num){
 function numToBuffer(num){
     var parts = [];
     while(num > 0){
-        parts.push(num & 0xff)
-        num = num >> 8
+        parts.push(num & 0xff);
+        num = num >> 8;
     }
     return new Uint8Array(parts.reverse());
 }
@@ -163,12 +162,12 @@ function generateEBML(json){
         ebml.push(data)
     }
 
-    var buffer = toFlatArray(ebml)
+    var buffer = toFlatArray(ebml);
     return new Uint8Array(buffer);
 }
 
 var getEbmlStructure = function(width, height, duration, privateData, rate) {
-    var EBML = [
+   return [
         {
             "id": 0x1a45dfa3, // EBML
             "data": [
@@ -315,8 +314,8 @@ var getEbmlStructure = function(width, height, duration, privateData, rate) {
                                     "data": [
                                         {
                                             "data": doubleToString32(rate),
-                                            "id": 0xB5, //rate
-                                        },
+                                            "id": 0xB5 //rate
+                                        }
                                     ]
                                 }
                             ]
@@ -334,12 +333,9 @@ var getEbmlStructure = function(width, height, duration, privateData, rate) {
             ]
         }
     ];
-    return EBML;
-}
+};
 
 var stableMergeSort = function(videoFrames, audioFrames) {
-    var len = videoFrames.length + audioFrames.length;
-    var pos = 0;
     var i = 0;
     var j = 0;
     var result = [];
@@ -361,7 +357,7 @@ var stableMergeSort = function(videoFrames, audioFrames) {
         }
     }
     return result;
-}
+};
 
 var Video = function (){
     this.frames = [];
@@ -379,11 +375,8 @@ var Video = function (){
     };
     this.compile = function(){
         this.frames = stableMergeSort(this.frames, this.audioFrames)
-        return this.toWebM();
-    }
-    this.getHeight = function() {
-        return this.frames[0].height;
-    }
+        return this._toWebM();
+    };
     this.addAudio = function(file) {
         this.audio = file;
         var Parser = require('./vorbis-parser');
@@ -394,8 +387,8 @@ var Video = function (){
         this.rate = vorbisFile.infoPacket.rate;
         this.codecPrivate = privateData;
         this.audioDuration = vorbisFile.getDuration()*1000;
-    }
-    this.toWebM = function(){
+    };
+    this._toWebM = function(){
         var CLUSTER_MAX_DURATION = 30000;
         var ebml = getEbmlStructure(this.width, this.height, Math.max(this.duration, this.audioDuration), this.codecPrivate, this.rate);
         var segment = ebml[1];
@@ -462,7 +455,7 @@ var Video = function (){
                             id: 0xa3
                         };
                     }))
-            }
+            };
 
             segment.data.push(cluster);
             clusterTimecode += clusterDuration;
@@ -489,8 +482,8 @@ module.exports = Video;
  */
 var fs = require('fs');
 var video = new Video();
-video.addAudio("1.ogg")
-var prefix = "data:image/webp;base64,"
+video.addAudio("1.ogg");
+var prefix = "data:image/webp;base64,";
 var image1 = fs.readFileSync("1.webp");
 var image2 = fs.readFileSync("2.webp");
 var images = [prefix + image1.toString('base64'), prefix + image2.toString('base64')];

@@ -6,10 +6,8 @@ var toFlatArray = function(arr, outBuffer){
     }
     for(var i = 0; i < arr.length; i++){
         if(typeof arr[i] == 'object'){
-            //an array
             toFlatArray(arr[i], outBuffer)
         }else{
-            //a simple element
             outBuffer.push(arr[i]);
         }
     }
@@ -28,25 +26,21 @@ var makeSimpleBlock = function(data){
     var out = [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function(e){
             return String.fromCharCode(e)
         }).join('') + data.frame;
-    //console.log(data.frame);
     return out;
 }
 
 function parseWebP(riff){
     var VP8 = riff.RIFF[0].WEBP[0];
 
-    var frame_start = VP8.indexOf('\x9d\x01\x2a'); //A VP8 keyframe starts with the 0x9d012a header
+    var frame_start = VP8.indexOf('\x9d\x01\x2a');
     for(var i = 0, c = []; i < 4; i++) c[i] = VP8.charCodeAt(frame_start + 3 + i);
 
-    var width, horizontal_scale, height, vertical_scale, tmp;
+    var width, height, tmp;
 
-    //the code below is literally copied verbatim from the bitstream spec
     tmp = (c[1] << 8) | c[0];
     width = tmp & 0x3FFF;
-    horizontal_scale = tmp >> 14;
     tmp = (c[3] << 8) | c[2];
     height = tmp & 0x3FFF;
-    vertical_scale = tmp >> 14;
     return {
         width: width,
         height: height,
@@ -71,11 +65,9 @@ function parseRIFF(string){
             offset += 4 + 4 + len;
             chunks[id].push(parseRIFF(data));
         } else if (id == 'WEBP') {
-            // Use (offset + 8) to skip past "VP8 "/"VP8L"/"VP8X" field after "WEBP"
             chunks[id].push(string.substr(offset + 8));
             offset = string.length;
         } else {
-            // Unknown chunk type; push entire payload
             chunks[id].push(string.substr(offset + 4));
             offset = string.length;
         }
@@ -83,35 +75,32 @@ function parseRIFF(string){
     return chunks;
 }
 
-// here's a little utility function that acts as a utility for other functions
-// basically, the only purpose is for encoding "Duration", which is encoded as
-// a double (considerably more difficult to encode than an integer)
 function doubleToString(num){
     return [].slice.call(
         new Uint8Array(
             (
-                new Float64Array([num]) //create a float64 array
-            ).buffer) //extract the array buffer
-        , 0) // convert the Uint8Array into a regular array
-        .map(function(e){ //since it's a regular array, we can now use map
-            return String.fromCharCode(e) // encode all the bytes individually
+                new Float64Array([num])
+            ).buffer)
+        , 0)
+        .map(function(e){
+            return String.fromCharCode(e)
         })
-        .reverse() //correct the byte endianness (assume it's little endian for now)
-        .join('') // join the bytes in holy matrimony as a string
+        .reverse()
+        .join('')
 }
 
 function doubleToString32(num){
     return [].slice.call(
         new Uint8Array(
             (
-                new Float32Array([num]) //create a float32 array
-            ).buffer) //extract the array buffer
-        , 0) // convert the Uint8Array into a regular array
-        .map(function(e){ //since it's a regular array, we can now use map
-            return String.fromCharCode(e) // encode all the bytes individually
+                new Float32Array([num])
+            ).buffer)
+        , 0)
+        .map(function(e){
+            return String.fromCharCode(e)
         })
-        .reverse() //correct the byte endianness (assume it's little endian for now)
-        .join('') // join the bytes in holy matrimony as a string
+        .reverse()
+        .join('')
 }
 
 function numToBuffer(num){
@@ -140,11 +129,6 @@ function strToBuffer(str){
     return arr;
 }
 
-
-//sorry this is ugly, and sort of hard to understand exactly why this was done
-// at all really, but the reason is that there's some code below that i dont really
-// feel like understanding, and this is easier than using my brain.
-
 function bitsToBuffer(bits){
     var data = [];
     var pad = (bits.length % 8) ? (new Array(1 + 8 - (bits.length % 8))).join('0') : '';
@@ -159,7 +143,6 @@ function generateEBML(json){
     var ebml = [];
     for(var i = 0; i < json.length; i++){
         if (!('id' in json[i])){
-            //already encoded blob or byteArray
             ebml.push(json[i]);
             continue;
         }
@@ -174,10 +157,6 @@ function generateEBML(json){
         var size_str = len.toString(2);
         var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
         var size = (new Array(zeroes)).join('0') + '1' + padded;
-
-        //i actually dont quite understand what went on up there, so I'm not really
-        //going to fix this, i'm probably just going to write some hacky thing which
-        //converts that string into a buffer-esque thing
 
         ebml.push(numToBuffer(json[i].id));
         ebml.push(bitsToBuffer(size));
@@ -407,7 +386,7 @@ var Video = function (){
     }
     this.addAudio = function(file) {
         this.audio = file;
-        var Parser = require('t-vorbis-parser');
+        var Parser = require('./vorbis-parser');
         var parser = new Parser(file);
         var vorbisFile = parser.parse();
         var privateData = vorbisFile.getCodecPrivateForMatroska();
@@ -474,7 +453,7 @@ var Video = function (){
                             frame: frame.type == 0 ? frame.data.slice(4) : frame.data,
                             invisible: 0,
                             keyframe: 1,
-                            //lacing: 0,
+                            lacing: 0,
                             trackNum: frame.type == 0 ? 1 : 2,
                             timecode: Math.round(frame.timecode-clusterTimecode)
                         });
@@ -485,12 +464,10 @@ var Video = function (){
                     }))
             }
 
-            //Add cluster to segment
             segment.data.push(cluster);
             clusterTimecode += clusterDuration;
         }
 
-        //First pass to compute cluster positions
         var position = 0;
         for(var i = 0; i < segment.data.length; i++){
             if (i >= 3) {
@@ -498,8 +475,7 @@ var Video = function (){
             }
             var data = generateEBML([segment.data[i]]);
             position += data.size || data.byteLength || data.length;
-            if (i != 2) { // not cues
-                //Save results to avoid having to encode everything twice
+            if (i != 2) {
                 segment.data[i] = data;
             }
         }
@@ -507,6 +483,7 @@ var Video = function (){
     };
 };
 
+module.exports = Video;
 /**
  * Example:
  */
@@ -517,7 +494,8 @@ var prefix = "data:image/webp;base64,"
 var image1 = fs.readFileSync("1.webp");
 var image2 = fs.readFileSync("2.webp");
 var images = [prefix + image1.toString('base64'), prefix + image2.toString('base64')];
-video.add(images[0], 10000);video.add(images[1], 10000);
+video.add(images[0], 10000);
+video.add(images[1], 10000);
 video.addAudio("1.ogg");
 var arrayBuffer = video.compile();
 var buffer = new Buffer(arrayBuffer.length);

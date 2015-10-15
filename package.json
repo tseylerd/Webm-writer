@@ -1,0 +1,24 @@
+{
+  "name": "webm-writer",
+  "version": "1.0.0",
+  "description": "merge webp images with ogg vorbis audio file",
+  "main": "writer.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tseylerd/Webm-writer.git"
+  },
+  "keywords": [
+    "webm",
+    "merge",
+    "matroska"
+  ],
+  "author": "Dmitriy Tseyler <tseylerd@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tseylerd/Webm-writer/issues"
+  },
+  "homepage": "https://github.com/tseylerd/Webm-writer#readme"
+}

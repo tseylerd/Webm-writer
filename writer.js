@@ -1,20 +1,29 @@
 var atob = require('atob');
 
+/**
+ * @param {Array} arr
+ * @param {Array} outBuffer
+ * @returns {Array}
+ */
 var toFlatArray = function(arr, outBuffer){
     if(outBuffer == null){
         outBuffer = [];
     }
     for(var i = 0; i < arr.length; i++){
-        if(typeof arr[i] == 'object'){
+        if(typeof arr[i] == 'object') {
             toFlatArray(arr[i], outBuffer)
-        }else{
+        } else {
             outBuffer.push(arr[i]);
         }
     }
     return outBuffer;
 };
 
-var makeSimpleBlock = function(data){
+/**
+ * @param {Object} data
+ * @returns {String}
+ */
+var makeSimpleBlock = function(data) {
     var flags = 0;
     if (data.keyframe) flags |= 128;
     if (data.invisible) flags |= 8;
@@ -28,14 +37,19 @@ var makeSimpleBlock = function(data){
         }).join('') + data.frame;
 };
 
-function parseWebP(riff){
+/**
+ * @param {String} riff
+ * @returns {Object}
+ */
+var parseWebP = function(riff) {
     var VP8 = riff.RIFF[0].WEBP[0];
 
     var frame_start = VP8.indexOf('\x9d\x01\x2a');
-    for(var i = 0, c = []; i < 4; i++) c[i] = VP8.charCodeAt(frame_start + 3 + i);
+    for(var i = 0, c = []; i < 4; i++) {
+        c[i] = VP8.charCodeAt(frame_start + 3 + i);
+    }
 
     var width, height, tmp;
-
     tmp = (c[1] << 8) | c[0];
     width = tmp & 0x3FFF;
     tmp = (c[3] << 8) | c[2];
@@ -48,9 +62,13 @@ function parseWebP(riff){
     }
 }
 
-function parseRIFF(string){
+/**
+ * @param {String} string
+ * @returns {Object}
+ */
+var parseRIFF = function(string){
     var offset = 0;
-    var chunks = {};
+    var chunks = new Object();
 
     while (offset < string.length) {
         var id = string.substr(offset, 4);
@@ -74,7 +92,11 @@ function parseRIFF(string){
     return chunks;
 }
 
-function doubleToString(num){
+/**
+ * @param {Number} num
+ * @returns {string}
+ */
+var doubleToString64 = function(num){
     return [].slice.call(
         new Uint8Array(
             (
@@ -88,7 +110,11 @@ function doubleToString(num){
         .join('')
 }
 
-function doubleToString32(num){
+/**
+ * @param {Number} num
+ * @returns {string}
+ */
+var doubleToString32 = function(num){
     return [].slice.call(
         new Uint8Array(
             (
@@ -102,7 +128,11 @@ function doubleToString32(num){
         .join('')
 }
 
-function numToBuffer(num){
+/**
+ * @param num
+ * @returns {Uint8Array}
+ */
+var numToBuffer = function(num){
     var parts = [];
     while(num > 0){
         parts.push(num & 0xff);
@@ -111,7 +141,12 @@ function numToBuffer(num){
     return new Uint8Array(parts.reverse());
 }
 
-function numToFixedBuffer(num, size){
+/**
+ * @param {Number} num
+ * @param {Number} size
+ * @returns {Uint8Array}
+ */
+var numToFixedBuffer = function(num, size){
     var parts = new Uint8Array(size);
     for(var i = size - 1; i >= 0; i--){
         parts[i] = num & 0xff;
@@ -120,7 +155,11 @@ function numToFixedBuffer(num, size){
     return parts;
 }
 
-function strToBuffer(str){
+/**
+ * @param {String} str
+ * @returns {Uint8Array}
+ */
+var strToBuffer = function(str){
     var arr = new Uint8Array(str.length);
     for(var i = 0; i < str.length; i++){
         arr[i] = str.charCodeAt(i)
@@ -128,7 +167,11 @@ function strToBuffer(str){
     return arr;
 }
 
-function bitsToBuffer(bits){
+/**
+ * @param {String} bits
+ * @returns {Uint8Array}
+ */
+var bitsToBuffer = function(bits) {
     var data = [];
     var pad = (bits.length % 8) ? (new Array(1 + 8 - (bits.length % 8))).join('0') : '';
     bits = pad + bits;
@@ -138,17 +181,21 @@ function bitsToBuffer(bits){
     return new Uint8Array(data);
 }
 
-function generateEBML(json){
+/**
+ * @param {Object} ebmlObject
+ * @returns {Uint8Array}
+ */
+var generateEBML = function(ebmlObject) {
     var ebml = [];
-    for(var i = 0; i < json.length; i++){
-        if (!('id' in json[i])){
-            ebml.push(json[i]);
+    for(var i = 0; i < ebmlObject.length; i++){
+        if (!('id' in ebmlObject[i])){
+            ebml.push(ebmlObject[i]);
             continue;
         }
 
-        var data = json[i].data;
+        var data = ebmlObject[i].data;
         if(typeof data == 'object') data = generateEBML(data);
-        if(typeof data == 'number') data = ('size' in json[i]) ? numToFixedBuffer(data, json[i].size) : bitsToBuffer(data.toString(2));
+        if(typeof data == 'number') data = ('size' in ebmlObject[i]) ? numToFixedBuffer(data, ebmlObject[i].size) : bitsToBuffer(data.toString(2));
         if(typeof data == 'string') data = strToBuffer(data);
 
         var len = data.size || data.byteLength || data.length;
@@ -157,7 +204,7 @@ function generateEBML(json){
         var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
         var size = (new Array(zeroes)).join('0') + '1' + padded;
 
-        ebml.push(numToBuffer(json[i].id));
+        ebml.push(numToBuffer(ebmlObject[i].id));
         ebml.push(bitsToBuffer(size));
         ebml.push(data)
     }
@@ -166,6 +213,14 @@ function generateEBML(json){
     return new Uint8Array(buffer);
 }
 
+/**
+ * @param {Number} width
+ * @param {Number} height
+ * @param {Number} duration
+ * @param {String} privateData
+ * @param {Number} rate
+ * @returns {Object}
+ */
 var getEbmlStructure = function(width, height, duration, privateData, rate) {
    return [
         {
@@ -220,7 +275,7 @@ var getEbmlStructure = function(width, height, duration, privateData, rate) {
                             "id": 0x5741 // WritingApp
                         },
                         {
-                            "data": doubleToString(duration),
+                            "data": doubleToString64(duration),
                             "id": 0x4489 // Duration
                         }
                     ]
@@ -334,7 +389,11 @@ var getEbmlStructure = function(width, height, duration, privateData, rate) {
         }
     ];
 };
-
+/**
+ * @param {Array} videoFrames
+ * @param {Array} audioFrames
+ * @returns {Array}
+ */
 var stableMergeSort = function(videoFrames, audioFrames) {
     var i = 0;
     var j = 0;
@@ -359,13 +418,20 @@ var stableMergeSort = function(videoFrames, audioFrames) {
     return result;
 };
 
-var Video = function (){
+/**
+ * @constructor
+ */
+var Video = function () {
     this.frames = [];
     this.duration = 0;
     this.height = 0;
     this.width = 0;
-    this.add = function(frame, duration){
-        var webp = parseWebP(parseRIFF(atob(frame.slice(23))));
+    /**
+     * @param {String} frame
+     * @param {Number} duration
+     */
+    this.addVideoFrame = function(frame, duration){
+        var webp = parseWebP(parseRIFF(atob(frame)));
         webp.timecode = this.duration;
         webp.type = 0;
         this.width = webp.width;
@@ -373,11 +439,19 @@ var Video = function (){
         this.duration += duration;
         this.frames.push(webp);
     };
+    /**
+     * Make video
+     * @returns {Array}
+     */
     this.compile = function(){
         this.frames = stableMergeSort(this.frames, this.audioFrames)
-        return this._toWebM();
+        this.resultArray = this._toWebM();
+        return this.resultArray;
     };
-    this.addAudio = function(file) {
+    /**
+     * @param {String} file
+     */
+    this.addAudioTrack = function(file) {
         this.audio = file;
         var Parser = require('./vorbis-parser');
         var parser = new Parser(file);
@@ -388,49 +462,67 @@ var Video = function (){
         this.codecPrivate = privateData;
         this.audioDuration = vorbisFile.getDuration()*1000;
     };
+    /**
+     * @param {String} file
+     */
+    this.save = function(file) {
+        var fs = require('fs');
+        var buffer = new Buffer(this.resultArray.length);
+        for (var i = 0; i < buffer.length; i++) {
+            buffer[i] = this.resultArray[i];
+        }
+        fs.writeFile(file, buffer);
+    };
     this._toWebM = function(){
         var CLUSTER_MAX_DURATION = 30000;
         var ebml = getEbmlStructure(this.width, this.height, Math.max(this.duration, this.audioDuration), this.codecPrivate, this.rate);
         var segment = ebml[1];
         var cues = segment.data[2];
 
-        //generate clusters
         var frameNumber = 0;
         var clusterTimecode = 0;
+        var firstVideoFrameInClusterTimecode = [];
+        var clusterNumber = 0;
 
         while(frameNumber < this.frames.length) {
-            var cuePoint = {
-                "id": 0xbb, // CuePoint
-                "data": [
-                    {
-                        "data": Math.round(clusterTimecode),
-                        "id": 0xb3 // CueTime
-                    },
-                    {
-                        "id": 0xb7, // CueTrackPositions
-                        "data": [
-                            {
-                                "data": 1,
-                                "id": 0xf7 // CueTrack
-                            },
-                            {
-                                "data": 0, // to be filled in when we know it
-                                "size": 8,
-                                "id": 0xf1 // CueClusterPosition
-                            }
-                        ]
-                    }
-                ]
-            };
-            cues.data.push(cuePoint);
-
             var clusterFrames = [];
             var clusterDuration = 0;
 
             do {
                 clusterFrames.push(this.frames[frameNumber]);
+                if (this.frames[frameNumber].type == 0 && !firstVideoFrameInClusterTimecode[clusterNumber]) {
+                    firstVideoFrameInClusterTimecode[clusterNumber] = this.frames[frameNumber].timecode;
+                }
             }   while(++frameNumber < this.frames.length && this.frames[frameNumber].timecode-clusterTimecode < CLUSTER_MAX_DURATION);
 
+            if (firstVideoFrameInClusterTimecode[clusterNumber] >= 0) {
+                var cuePoint = {
+                    "id": 0xbb, // CuePoint
+                    "data": [
+                        {
+                            "data": Math.round(firstVideoFrameInClusterTimecode[clusterNumber]),
+                            "id": 0xb3 // CueTime
+                        },
+                        {
+                            "id": 0xb7, // CueTrackPositions
+                            "data": [
+                                {
+                                    "data": 1,
+                                    "id": 0xf7 // CueTrack
+                                },
+                                {
+                                    "data": 0, // to be filled in when we know it
+                                    "size": 8,
+                                    "id": 0xf1 // CueClusterPosition
+                                }
+                            ]
+                        }
+                    ]
+                };
+                cues.data.push(cuePoint);
+            }
+
+            clusterNumber++;
             clusterDuration = this.frames[frameNumber-1].timecode-clusterTimecode;
 
             var cluster = {
@@ -462,9 +554,10 @@ var Video = function (){
         }
 
         var position = 0;
+        var cueNumber = 0;
         for(var i = 0; i < segment.data.length; i++){
-            if (i >= 3) {
-                cues.data[i-3].data[1].data[1].data = position;
+            if (i >= 3 && cues.data[cueNumber] && firstVideoFrameInClusterTimecode[i - 3] >= 0) {
+                cues.data[cueNumber++].data[1].data[1].data = position;
             }
             var data = generateEBML([segment.data[i]]);
             position += data.size || data.byteLength || data.length;
@@ -477,29 +570,18 @@ var Video = function (){
 };
 
 module.exports = Video;
-/**
- * Example:
+/*
+ Example:
+ var fs = require('fs');
+ var video = new Video();
+ video.addAudioTrack("1.ogg");
+ //var prefix = "data:image/webp;base64,";
+ var image1 = fs.readFileSync("1.webp");
+ var image2 = fs.readFileSync("2.webp");
+ var images = [image1.toString('base64'), image2.toString('base64')];
+ video.addVideoFrame(images[0], 30000);
+ video.addVideoFrame(images[1], 30000);
+ video.addAudioTrack("1.ogg");
+ video.compile()
+ video.save("resultVideo.webm")
  */
-var fs = require('fs');
-var video = new Video();
-video.addAudio("1.ogg");
-var prefix = "data:image/webp;base64,";
-var image1 = fs.readFileSync("1.webp");
-var image2 = fs.readFileSync("2.webp");
-var images = [prefix + image1.toString('base64'), prefix + image2.toString('base64')];
-video.add(images[0], 10000);
-video.add(images[1], 10000);
-video.addAudio("1.ogg");
-var arrayBuffer = video.compile();
-var buffer = new Buffer(arrayBuffer.length);
-for (var i = 0; i < buffer.length; i++) {
-    buffer[i] = arrayBuffer[i];
-}
-fs.writeFile("vid.webm", buffer, function(e) {
-    if (e) {
-        console.log(e)
-    }
-    else {
-        console.log("Success")
-    }
-});

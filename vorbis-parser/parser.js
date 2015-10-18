@@ -231,13 +231,13 @@ function Page() {
  */
 var VorbisFile = function() {
     this.lastGranulePosition = -1;
-    this.audioPackets = [];
+    this.audioPackages = [];
     this.i = 0;
     this.addAudioPacket = function(audioData) {
         this.audioSize += audioData.data.length;
         if (audioData.parent.granulePosition > this.lastGranulePosition)
             this.lastGranulePosition = audioData.parent.granulePosition;
-        this.audioPackets[this.i++] = audioData;
+        this.audioPackages[this.i++] = audioData;
     };
     this.setInfoPacket = function(infoData) {
         this.infoPacket = infoData;
@@ -276,13 +276,29 @@ var VorbisFile = function() {
         return buffer.toString('binary');
     }
     this.getWebMSpecificAudioPackets = function() {
-        var packets = this.audioPackets;
+        var packages = this.audioPackages;
         var result = [];
-        for (var i = 0; i < packets.length; i++) {
+        var currentPackage = 0;
+        var currentTime = 0;
+        while (currentPackage < packages.length) {
+            var beginTime = packages[currentPackage].parent.granulePosition;
+            var beginIndex = currentPackage;
+            var size = 0;
+            while (currentPackage < packages.length && beginTime == packages[currentPackage].parent.granulePosition) {
+                size += packages[currentPackage].data.length;
+                currentPackage++;
+            }
+            var diff = beginTime - currentTime;
+            var bytesInTime = diff / size;
+            for (var i = beginIndex; i < currentPackage; i++) {
+                packages[i].timecode = (currentTime += bytesInTime * packages[i].data.length);
+            }
+        }
+        for (var j = 0; j < packages.length; j++) {
             result.push({
-                data : packets[i].data.toString('binary'),
-                timecode : packets[i].parent.granulePosition/this.infoPacket.rate * 1000
-            })
+                data : packages[j].data.toString('binary'),
+                timecode : packages[j].timecode/this.infoPacket.rate * 1000
+            });
         }
         return result;
     }

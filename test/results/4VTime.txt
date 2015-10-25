@@ -1,0 +1,2 @@
+Time: 7.69 secs 
+Maybe memory: 3880419328 (?)KB

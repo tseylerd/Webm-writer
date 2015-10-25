@@ -6,7 +6,7 @@ Run build.sh first.
 Example:  
 ```
 var fs = require('fs');  
-var Video = require('webm-writer');  
+var Video = require('src/writer.js');
 var video = new Video();  
 video.addAudioTrack("1.ogg"); //file name  
 var image1 = fs.readFileSync("1.webp");  

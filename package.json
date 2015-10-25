@@ -1,8 +1,13 @@
 {
   "name": "webm-writer",
   "version": "1.0.0",
-  "description": "merge webp images with ogg vorbis audio file",
-  "main": "writer.js",
+  "description": "Webm-writer merges webp frames with ogg audio stream",
+  "main": "src/writer.js",
+  "dependencies": {
+    "fs": "^0.0.2",
+    "atob": "^1.1.2"
+  },
+  "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -11,9 +16,12 @@
     "url": "git+https://github.com/tseylerd/Webm-writer.git"
   },
   "keywords": [
-    "webm",
     "merge",
-    "matroska"
+    "mkv",
+    "muxer",
+    "webp",
+    "ogg",
+    "webm"
   ],
   "author": "Dmitriy Tseyler <tseylerd@gmail.com>",
   "license": "ISC",

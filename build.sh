@@ -1,3 +1,3 @@
 #!/bin/bash 
 npm install
-node src/writer.js
+find . -name '*.sh' | xargs chmod +x

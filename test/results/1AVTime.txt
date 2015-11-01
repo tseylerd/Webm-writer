@@ -1,2 +1,4 @@
-Time: 1.96 secs 
-Maybe memory: 723746816 (?)KB
+
+real	0m1.999s
+user	0m1.831s
+sys	0m0.173s

@@ -7,6 +7,7 @@
  * Parse function returns VorbisFile.
  */
 
+var MS_IN_SECOND = 1000;
 /**
  * Returns integer from 4 Numbers in reverse order
  * @param {Number} x0
@@ -290,9 +291,14 @@ var VorbisFile = function() {
             var beginTime = packages[currentPackage].parent.granulePosition;
             var beginIndex = currentPackage;
             var size = 0;
-            while (currentPackage < packages.length && beginTime == packages[currentPackage].parent.granulePosition) {
-                size += packages[currentPackage].data.length;
-                currentPackage++;
+            while (currentPackage < packages.length) {
+                var isTheSameTimecode = beginTime == packages[currentPackage].parent.granulePosition;
+                if (isTheSameTimecode) {
+                    size += packages[currentPackage].data.length;
+                    currentPackage++;
+                } else {
+                    break;
+                }
             }
             var diff = beginTime - currentTime;
             var bytesInTime = diff / size;
@@ -300,10 +306,13 @@ var VorbisFile = function() {
                 packages[i].timecode = (currentTime += bytesInTime * packages[i].data.length);
             }
         }
-        for (var j = 0; j < packages.length && this._checkDuration(packages[j].timecode/this.infoPacket.rate*1000, duration); j++) {
+        for (var j = 0; j < packages.length; j++) {
+            var timecodeSmallerThanMax = this._checkDuration(packages[j].timecode/this.infoPacket.rate * MS_IN_SECOND, duration);
+            if (!timecodeSmallerThanMax)
+                break;
             result.push({
                 data : packages[j].data.toString('binary'),
-                timecode : packages[j].timecode/this.infoPacket.rate * 1000
+                timecode : packages[j].timecode/this.infoPacket.rate * MS_IN_SECOND
             });
         }
         return result;
@@ -312,12 +321,10 @@ var VorbisFile = function() {
 
 /**
  * Creates new parser.
- * @param {String} file
+ * @param {Buffer} buffer
  * @constructor
  */
-var Parser = function (file) {
-    var fs = require('fs');
-    var buffer = fs.readFileSync(file);
+var Parser = function (buffer) {
     /** @private */ this._dataIterator = new DataIterator(buffer, 0);
     /** @private */ this._packetReader = new PacketReader(this._dataIterator);
     /** @private */ this._vorbisFile = new VorbisFile();

@@ -1,23 +1,48 @@
+/**
+ * Webm-writer uses for merge any webp images with ogg vorbis audio file. First, you need to add your webp images
+ * as base64 encoded strings in writer. Second you need to add buffer with ogg vorbis audio in writer. Then call compile
+ * and enjoy your video.
+ * First, writer creates matroska ebml file structure. Then writer push frames in sorted order by timecode in cluster.
+ * Then we save cue points position in embl and then generate final buffer with webm file data.
+ */
+
 var atob = require('atob');
+
+var test = true;
+var usages = [];
+var saveMemoryUsage = function () {
+    if (!test)
+        return;
+    var usage = process.memoryUsage();
+    usages.push(usage['heapUsed']);
+};
+
+var MS_IN_SECOND = 1000;
+var CLUSTER_MAX_DURATION_MS = 30 * MS_IN_SECOND;
+var SEGMENT_INDEX = 1;
+var CUES_INDEX = 2;
+var FRAME_TYPE_VIDEO = 0;
+var VIDEO_TRACK_NUMBER = 1;
+var AUDIO_TRACK_NUMBER = 2;
 
 /**
  * @param {Array} arr
  * @param {Array} outBuffer
  * @returns {Array}
  */
-var toFlatArray = function(arr, outBuffer){
-    if(outBuffer == null){
+var toFlatArray = function (arr, outBuffer) {
+    if (outBuffer == null) {
         outBuffer = [];
     }
-    //console.log("enter")
-    for(var i = 0; i < arr.length; i++){
-        if(typeof arr[i] == 'object') {
+    saveMemoryUsage();
+    for (var i = 0; i < arr.length; i++) {
+        if (typeof arr[i] == 'object') {
             toFlatArray(arr[i], outBuffer)
         } else {
             outBuffer.push(arr[i]);
         }
     }
-    //console.log("exit")
+    saveMemoryUsage();
     return outBuffer;
 };
 
@@ -25,7 +50,7 @@ var toFlatArray = function(arr, outBuffer){
  * @param {Object} data
  * @returns {String}
  */
-var makeSimpleBlock = function(data) {
+var makeSimpleBlock = function (data) {
     var flags = 0;
     if (data.keyframe) flags |= 128;
     if (data.invisible) flags |= 8;
@@ -34,7 +59,7 @@ var makeSimpleBlock = function(data) {
     if (data.trackNum > 127) {
         throw "TrackNumber > 127 not supported";
     }
-    return [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function(e){
+    return [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function (e) {
             return String.fromCharCode(e)
         }).join('') + data.frame;
 };
@@ -43,11 +68,11 @@ var makeSimpleBlock = function(data) {
  * @param {String} riff
  * @returns {Object}
  */
-var parseWebP = function(riff) {
+var parseWebP = function (riff) {
     var VP8 = riff.RIFF[0].WEBP[0];
 
     var frame_start = VP8.indexOf('\x9d\x01\x2a');
-    for(var i = 0, c = []; i < 4; i++) {
+    for (var i = 0, c = []; i < 4; i++) {
         c[i] = VP8.charCodeAt(frame_start + 3 + i);
     }
 
@@ -62,13 +87,13 @@ var parseWebP = function(riff) {
         data: VP8,
         riff: riff
     }
-}
+};
 
 /**
  * @param {String} string
  * @returns {Object}
  */
-var parseRIFF = function(string){
+var parseRIFF = function (string) {
     var offset = 0;
     var chunks = new Object();
 
@@ -76,10 +101,10 @@ var parseRIFF = function(string){
         var id = string.substr(offset, 4);
         chunks[id] = chunks[id] || [];
         if (id == 'RIFF' || id == 'LIST') {
-            var len = parseInt(string.substr(offset + 4, 4).split('').map(function(i){
+            var len = parseInt(string.substr(offset + 4, 4).split('').map(function (i) {
                 var unpadded = i.charCodeAt(0).toString(2);
                 return (new Array(8 - unpadded.length + 1)).join('0') + unpadded
-            }).join(''),2);
+            }).join(''), 2);
             var data = string.substr(offset + 4 + 4, len);
             offset += 4 + 4 + len;
             chunks[id].push(parseRIFF(data));
@@ -92,126 +117,126 @@ var parseRIFF = function(string){
         }
     }
     return chunks;
-}
+};
 
 /**
  * @param {Number} num
  * @returns {string}
  */
-var doubleToString64 = function(num){
+var doubleToString64 = function (num) {
     return [].slice.call(
         new Uint8Array(
             (
                 new Float64Array([num])
             ).buffer)
         , 0)
-        .map(function(e){
+        .map(function (e) {
             return String.fromCharCode(e)
         })
         .reverse()
         .join('')
-}
+};
 
 /**
  * @param {Number} num
  * @returns {string}
  */
-var doubleToString32 = function(num){
+var doubleToString32 = function (num) {
     return [].slice.call(
         new Uint8Array(
             (
                 new Float32Array([num])
             ).buffer)
         , 0)
-        .map(function(e){
+        .map(function (e) {
             return String.fromCharCode(e)
         })
         .reverse()
         .join('')
-}
+};
 
 /**
  * @param num
  * @returns {Uint8Array}
  */
-var numToBuffer = function(num){
+var numToBuffer = function (num) {
     var parts = [];
-    while(num > 0){
+    while (num > 0) {
         parts.push(num & 0xff);
         num = num >> 8;
     }
     return new Uint8Array(parts.reverse());
-}
+};
 
 /**
  * @param {Number} num
  * @param {Number} size
  * @returns {Uint8Array}
  */
-var numToFixedBuffer = function(num, size){
+var numToFixedBuffer = function (num, size) {
     var parts = new Uint8Array(size);
-    for(var i = size - 1; i >= 0; i--){
+    for (var i = size - 1; i >= 0; i--) {
         parts[i] = num & 0xff;
         num = num >> 8;
     }
     return parts;
-}
+};
 
 /**
  * @param {String} str
  * @returns {Uint8Array}
  */
-var strToBuffer = function(str){
+var strToBuffer = function (str) {
     var arr = new Uint8Array(str.length);
-    for(var i = 0; i < str.length; i++){
+    for (var i = 0; i < str.length; i++) {
         arr[i] = str.charCodeAt(i)
     }
     return arr;
-}
+};
 
 /**
  * @param {String} bits
  * @returns {Uint8Array}
  */
-var bitsToBuffer = function(bits) {
+var bitsToBuffer = function (bits) {
     var data = [];
     var pad = (bits.length % 8) ? (new Array(1 + 8 - (bits.length % 8))).join('0') : '';
     bits = pad + bits;
-    for(var i = 0; i < bits.length; i+= 8){
-        data.push(parseInt(bits.substr(i,8),2))
+    for (var i = 0; i < bits.length; i += 8) {
+        data.push(parseInt(bits.substr(i, 8), 2))
     }
     return new Uint8Array(data);
-}
+};
 
 /**
  * @param {Object} ebmlObject
  * @returns {Uint8Array}
  */
-var generateEBML = function(ebmlObject) {
+var generateEBML = function (ebmlObject) {
     var ebml = [];
-    for(var i = 0; i < ebmlObject.length; i++){
-        if (!('id' in ebmlObject[i])){
+    for (var i = 0; i < ebmlObject.length; i++) {
+        if (!('id' in ebmlObject[i])) {
             ebml.push(ebmlObject[i]);
             continue;
         }
         var data = ebmlObject[i].data;
-        if (data == undefined)
-            console.log(ebmlObject[i])
-        if(typeof data == 'object') data = generateEBML(data);
-        if(typeof data == 'number') data = ('size' in ebmlObject[i]) ? numToFixedBuffer(data, ebmlObject[i].size) : bitsToBuffer(data.toString(2));
-        if(typeof data == 'string') data = strToBuffer(data);
+        if (typeof data == 'object') data = generateEBML(data);
+        if (typeof data == 'number') data = ('size' in ebmlObject[i]) ? numToFixedBuffer(data, ebmlObject[i].size) : bitsToBuffer(data.toString(2));
+        if (typeof data == 'string') data = strToBuffer(data);
         var len = data.size || data.byteLength || data.length;
-        var zeroes = Math.ceil(Math.ceil(Math.log(len)/Math.log(2))/8);
+        var zeroes = Math.ceil(Math.ceil(Math.log(len) / Math.log(2)) / 8);
         var size_str = len.toString(2);
         var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
         var size = (new Array(zeroes)).join('0') + '1' + padded;
         ebml.push(numToBuffer(ebmlObject[i].id));
         ebml.push(bitsToBuffer(size));
-        ebml.push(data)
+        ebml.push(data);
+        saveMemoryUsage();
     }
     var buffer = toFlatArray(ebml);
+    saveMemoryUsage();
     return new Uint8Array(buffer);
-}
+};
 
 /**
  * @param {Number} width
@@ -219,16 +244,16 @@ var generateEBML = function(ebmlObject) {
  * @param {Number} rate
  * @returns {Object}
  */
-var getTracks = function(width, height, rate, privateData) {
+var getTracks = function (width, height, rate, privateData) { // because video may contain only video or audio frames
     if (rate && width) {
-        return  {
+        return {
             "id": 0x1654ae6b, // Tracks
             "data": [
                 {
                     "id": 0xae, // TrackEntry
                     "data": [
                         {
-                            "data": 1,
+                            "data": VIDEO_TRACK_NUMBER,
                             "id": 0xd7 // TrackNumber
                         },
                         {
@@ -274,7 +299,7 @@ var getTracks = function(width, height, rate, privateData) {
                     "id": 0xae, // TrackEntry
                     "data": [
                         {
-                            "data": 2,
+                            "data": AUDIO_TRACK_NUMBER,
                             "id": 0xd7 // TrackNumber
                         },
                         {
@@ -298,8 +323,8 @@ var getTracks = function(width, height, rate, privateData) {
                             "id": 0x258688 // CodecName
                         },
                         {
-                            "data" : privateData,
-                            "id" : 0x63A2 //CodecPrivate
+                            "data": privateData,
+                            "id": 0x63A2 //CodecPrivate
                         },
                         {
                             "data": 2,
@@ -318,7 +343,7 @@ var getTracks = function(width, height, rate, privateData) {
                 }
             ]
         }
-    } else if (width){
+    } else if (width) {
         return {
             "id": 0x1654ae6b, // Tracks
             "data": [
@@ -371,7 +396,7 @@ var getTracks = function(width, height, rate, privateData) {
             ]
         }
     } else if (rate) {
-        return  {
+        return {
             "id": 0x1654ae6b, // Tracks
             "data": [
                 {
@@ -402,8 +427,8 @@ var getTracks = function(width, height, rate, privateData) {
                             "id": 0x258688 // CodecName
                         },
                         {
-                            "data" : privateData,
-                            "id" : 0x63A2 //CodecPrivate
+                            "data": privateData,
+                            "id": 0x63A2 //CodecPrivate
                         },
                         {
                             "data": 2,
@@ -433,8 +458,8 @@ var getTracks = function(width, height, rate, privateData) {
  * @param {Number} rate
  * @returns {Object}
  */
-var getEbmlStructure = function(width, height, duration, privateData, rate) {
-   return [
+var getEbmlStructure = function (width, height, duration, privateData, rate) { // create mkv-specific ebml structure
+    return [
         {
             "id": 0x1a45dfa3, // EBML
             "data": [
@@ -510,7 +535,7 @@ var getEbmlStructure = function(width, height, duration, privateData, rate) {
  * @param {Array} audioFrames
  * @returns {Array}
  */
-var stableMergeSort = function(videoFrames, audioFrames) {
+var mergeSortedLists = function (videoFrames, audioFrames) { // merge frames by timecode
     var i = 0;
     var j = 0;
     var result = [];
@@ -540,72 +565,78 @@ var stableMergeSort = function(videoFrames, audioFrames) {
 };
 
 /**
+ * @param {Number} width
+ * @param {Number} height
  * @constructor
  */
-var Video = function () {
+var Video = function (width, height) {
     this.frames = [];
+    this.videoFrames = [];
     this.duration = 0;
-    this.height = 0;
-    this.width = 0;
+    this.height = height;
+    this.width = width;
     /**
-     * @param {String} frame
+     * @param {String} frame String widthin encoded in base64 webp image
      * @param {Number} duration
      */
-    this.addVideoFrame = function(frame, duration){
+    this.addVideoFrame = function (frame, duration) {
         var webp = parseWebP(parseRIFF(atob(frame)));
         webp.timecode = this.duration;
-        webp.type = 0;
-        this.width = webp.width;
-        this.height = webp.height;
-        this.duration += duration - 40 > 0 ? 40 : duration;
-        this.frames.push(webp);
+        webp.type = FRAME_TYPE_VIDEO;
+        this.duration += duration;
+        this.videoFrames.push(webp);
+        saveMemoryUsage();
     };
     /**
      * Make video
      * @returns {Array}
      */
-    this.compile = function(){
-        this.frames = stableMergeSort(this.frames, this.audioFrames);
+    this.compile = function () {
+        this.frames = mergeSortedLists(this.videoFrames, this.audioFrames);
+        saveMemoryUsage();
         this.resultArray = this._toWebM();
-        return this.resultArray;
+        saveMemoryUsage();
+        return usages; //only for testing
     };
     /**
-     * @param {String} file
+     * @param {Buffer} buffer
+     * @param {Number} duration
      */
-    this.addAudioTrack = function(file, duration) {
-        this.audio = file;
+    this.addAudioTrack = function (buffer, duration) {
         var Parser = require('./vorbis-parser');
-        var parser = new Parser(file);
+        var parser = new Parser(buffer);
         var vorbisFile = parser.parse();
         var privateData = vorbisFile.getCodecPrivateForMatroska();
         this.audioFrames = vorbisFile.getWebMSpecificAudioPackets(duration);
         this.rate = vorbisFile.infoPacket.rate;
         this.codecPrivate = privateData;
-        this.audioDuration = duration || vorbisFile.getDuration()*1000;
+        this.audioDuration = duration || vorbisFile.getDuration() * MS_IN_SECOND;
+        saveMemoryUsage();
     };
     /**
      * @param {String} file
      */
-    this.save = function(file) {
+    this.save = function (file) {
         var fs = require('fs');
         var buffer = new Buffer(this.resultArray.length);
         for (var i = 0; i < buffer.length; i++) {
             buffer[i] = this.resultArray[i];
         }
         fs.writeFile(file, buffer);
+        saveMemoryUsage();
     };
-    this._toWebM = function(){
-        var CLUSTER_MAX_DURATION = 30000;
+    this._toWebM = function () {
+
         var ebml = getEbmlStructure(this.width, this.height, Math.max(this.duration, this.audioDuration), this.codecPrivate, this.rate);
-        var segment = ebml[1];
-        var cues = segment.data[2];
+        var segment = ebml[SEGMENT_INDEX];
+        var cues = segment.data[CUES_INDEX];
 
         var frameNumber = 0;
         var clusterTimecode = 0;
         var firstVideoFrameInClusterTimecode = [];
         var clusterNumber = 0;
 
-        while(frameNumber < this.frames.length) {
+        while (frameNumber < this.frames.length) {
             var clusterFrames = [];
             var clusterDuration = 0;
 
@@ -614,7 +645,7 @@ var Video = function () {
                 if (this.frames[frameNumber].type == 0 && !firstVideoFrameInClusterTimecode[clusterNumber]) {
                     firstVideoFrameInClusterTimecode[clusterNumber] = this.frames[frameNumber].timecode;
                 }
-            }   while(++frameNumber < this.frames.length && this.frames[frameNumber].timecode-clusterTimecode < CLUSTER_MAX_DURATION);
+            } while (++frameNumber < this.frames.length && this.frames[frameNumber].timecode - clusterTimecode < CLUSTER_MAX_DURATION_MS);
             if (firstVideoFrameInClusterTimecode[clusterNumber] >= 0) {
                 var cuePoint = {
                     "id": 0xbb, // CuePoint
@@ -627,7 +658,7 @@ var Video = function () {
                             "id": 0xb7, // CueTrackPositions
                             "data": [
                                 {
-                                    "data": 1,
+                                    "data": VIDEO_TRACK_NUMBER, //
                                     "id": 0xf7 // CueTrack
                                 },
                                 {
@@ -643,8 +674,8 @@ var Video = function () {
             }
 
             clusterNumber++;
-            clusterDuration = this.frames[frameNumber-1].timecode-clusterTimecode;
-
+            clusterDuration = this.frames[frameNumber - 1].timecode - clusterTimecode;
+            saveMemoryUsage();
             var cluster = {
                 "id": 0x1f43b675, // Cluster
                 "data": [
@@ -652,15 +683,15 @@ var Video = function () {
                         "data": Math.round(clusterTimecode),
                         "id": 0xe7 // Timecode
                     }
-                ].concat(clusterFrames.map(function(frame){
+                ].concat(clusterFrames.map(function (frame) {
                         var block = makeSimpleBlock({
                             discardable: 0,
-                            frame: frame.type == 0 ? frame.data.slice(4) : frame.data,
+                            frame: frame.type == FRAME_TYPE_VIDEO ? frame.data.slice(4) : frame.data,
                             invisible: 0,
                             keyframe: 1,
                             lacing: 0,
-                            trackNum: frame.type == 0 ? 1 : 2,
-                            timecode: Math.round(frame.timecode-clusterTimecode)
+                            trackNum: frame.type == FRAME_TYPE_VIDEO ? VIDEO_TRACK_NUMBER : AUDIO_TRACK_NUMBER,
+                            timecode: Math.round(frame.timecode - clusterTimecode)
                         });
                         return {
                             data: block,
@@ -668,14 +699,16 @@ var Video = function () {
                         };
                     }))
             };
-
+            saveMemoryUsage();
             segment.data.push(cluster);
             clusterTimecode += clusterDuration;
         }
         var position = 0;
         var cueNumber = 0;
-        for(var i = 0; i < segment.data.length; i++){
-            if (i >= 3 && cues.data[cueNumber] && firstVideoFrameInClusterTimecode[i - 3] >= 0) {
+        for (var i = 0; i < segment.data.length; i++) {
+            var haveCues = i >= (CUES_INDEX + 1) && cues.data[cueNumber];
+            var haveVideoFrameInCluster = firstVideoFrameInClusterTimecode[i - (CUES_INDEX + 1)] >= 0;
+            if (haveCues && haveVideoFrameInCluster) {
                 cues.data[cueNumber++].data[1].data[1].data = position;
             }
             var data = generateEBML([segment.data[i]]);

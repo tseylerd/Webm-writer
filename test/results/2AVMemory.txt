@@ -1,1 +1,1 @@
-Max heap size (bytes): 301239056
+Max heap size (bytes): 301213216

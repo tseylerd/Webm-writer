@@ -24,6 +24,39 @@ var CUES_INDEX = 2;
 var FRAME_TYPE_VIDEO = 0;
 var VIDEO_TRACK_NUMBER = 1;
 var AUDIO_TRACK_NUMBER = 2;
+var EBML_HEADER = {
+    "id": 0x1a45dfa3, // EBML
+    "data": [
+        {
+            "data": 1,
+            "id": 0x4286 // EBMLVersion
+        },
+        {
+            "data": 1,
+            "id": 0x42f7 // EBMLReadVersion
+        },
+        {
+            "data": 4,
+            "id": 0x42f2 // EBMLMaxIDLength
+        },
+        {
+            "data": 8,
+            "id": 0x42f3 // EBMLMaxSizeLength
+        },
+        {
+            "data": "webm",
+            "id": 0x4282 // DocType
+        },
+        {
+            "data": 2,
+            "id": 0x4287 // DocTypeVersion
+        },
+        {
+            "data": 2,
+            "id": 0x4285 // DocTypeReadVersion
+        }
+    ]
+};
 
 /**
  * @param {Array} arr
@@ -240,8 +273,9 @@ var generateEBML = function (ebmlObject) {
 
 /**
  * @param {Number} width
- * @param {Number}height
+ * @param {Number} height
  * @param {Number} rate
+ * @param {String} privateData
  * @returns {Object}
  */
 var getTracks = function (width, height, rate, privateData) { // because video may contain only video or audio frames
@@ -448,7 +482,54 @@ var getTracks = function (width, height, rate, privateData) { // because video m
             ]
         }
     }
-}
+};
+/**
+ * @param {Number} duration
+ * @returns {Object}
+ */
+var getSegmentHeader = function(duration) {
+    return {
+        "id": 0x1549a966, // Info
+        "data": [
+            {
+                "data": 1e6, //do things in millisecs (num of nanosecs for duration scale)
+                "id": 0x2ad7b1 // TimecodeScale
+            },
+            {
+                "data": "webm-writer",
+                "id": 0x4d80 // MuxingApp
+            },
+            {
+                "data": "webm-writer",
+                "id": 0x5741 // WritingApp
+            },
+            {
+                "data": doubleToString64(duration),
+                "id": 0x4489 // Duration
+            }
+        ]
+    };
+};
+
+/**
+ * @param {Number} duration
+ * @param {String} privateData
+ * @param {Number} rate
+ * @returns {Object}
+ */
+var getStructureWithoutVideo = function(duration, privateData, rate) {
+    return[
+        EBML_HEADER,
+        {
+            "id": 0x18538067, // Segment
+            "data": [
+                getSegmentHeader(duration),
+                getTracks(undefined, undefined, rate, privateData),
+                //cluster insertion point
+            ]
+        }
+    ];
+};
 
 /**
  * @param {Number} width
@@ -458,65 +539,13 @@ var getTracks = function (width, height, rate, privateData) { // because video m
  * @param {Number} rate
  * @returns {Object}
  */
-var getEbmlStructure = function (width, height, duration, privateData, rate) { // create mkv-specific ebml structure
+var getStructureWithVideo = function(width, height, duration, rate, privateData) {
     return [
-        {
-            "id": 0x1a45dfa3, // EBML
-            "data": [
-                {
-                    "data": 1,
-                    "id": 0x4286 // EBMLVersion
-                },
-                {
-                    "data": 1,
-                    "id": 0x42f7 // EBMLReadVersion
-                },
-                {
-                    "data": 4,
-                    "id": 0x42f2 // EBMLMaxIDLength
-                },
-                {
-                    "data": 8,
-                    "id": 0x42f3 // EBMLMaxSizeLength
-                },
-                {
-                    "data": "webm",
-                    "id": 0x4282 // DocType
-                },
-                {
-                    "data": 2,
-                    "id": 0x4287 // DocTypeVersion
-                },
-                {
-                    "data": 2,
-                    "id": 0x4285 // DocTypeReadVersion
-                }
-            ]
-        },
+        EBML_HEADER,
         {
             "id": 0x18538067, // Segment
             "data": [
-                {
-                    "id": 0x1549a966, // Info
-                    "data": [
-                        {
-                            "data": 1e6, //do things in millisecs (num of nanosecs for duration scale)
-                            "id": 0x2ad7b1 // TimecodeScale
-                        },
-                        {
-                            "data": "webm-writer",
-                            "id": 0x4d80 // MuxingApp
-                        },
-                        {
-                            "data": "webm-writer",
-                            "id": 0x5741 // WritingApp
-                        },
-                        {
-                            "data": doubleToString64(duration),
-                            "id": 0x4489 // Duration
-                        }
-                    ]
-                },
+                getSegmentHeader(duration),
                 getTracks(width, height, rate, privateData),
                 {
                     "id": 0x1c53bb6b, // Cues
@@ -529,6 +558,22 @@ var getEbmlStructure = function (width, height, duration, privateData, rate) { /
             ]
         }
     ];
+};
+
+/**
+ * @param {Number} width
+ * @param {Number} height
+ * @param {Number} duration
+ * @param {String} privateData
+ * @param {Number} rate
+ * @returns {Object}
+ */
+var getEbmlStructure = function (width, height, duration, privateData, rate) { // create mkv-specific ebml structure
+    if (width && height) {
+        return getStructureWithVideo(width, height, duration, rate, privateData);
+    } else {
+        return getStructureWithoutVideo(duration, privateData, rate)
+    }
 };
 /**
  * @param {Array} videoFrames
@@ -646,6 +691,7 @@ var Video = function (width, height) {
                     firstVideoFrameInClusterTimecode[clusterNumber] = this.frames[frameNumber].timecode;
                 }
             } while (++frameNumber < this.frames.length && this.frames[frameNumber].timecode - clusterTimecode < CLUSTER_MAX_DURATION_MS);
+
             if (firstVideoFrameInClusterTimecode[clusterNumber] >= 0) {
                 var cuePoint = {
                     "id": 0xbb, // CuePoint
@@ -706,7 +752,7 @@ var Video = function (width, height) {
         var position = 0;
         var cueNumber = 0;
         for (var i = 0; i < segment.data.length; i++) {
-            var haveCues = i >= (CUES_INDEX + 1) && cues.data[cueNumber];
+            var haveCues = this.width && i >= (CUES_INDEX + 1) && cues.data[cueNumber];
             var haveVideoFrameInCluster = firstVideoFrameInClusterTimecode[i - (CUES_INDEX + 1)] >= 0;
             if (haveCues && haveVideoFrameInCluster) {
                 cues.data[cueNumber++].data[1].data[1].data = position;

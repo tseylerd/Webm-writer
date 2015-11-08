@@ -16,11 +16,11 @@ for (var j = 0; j < frames / 2; j++) {
 var usages = video.compile();
 video.save(__dirname + "/videos/" + duration / 1000 + "secVideo.webm");
 
-var max = 0;
+/*var max = 0;
 usages.map(function (e) {
     if (parseInt(e) > max)
         max = e;
 });
 fs.openSync(__dirname + "/results/" + duration / 1000 + "VMemory.txt", "w");
-fs.writeFile(__dirname + "/results/" + duration / 1000 + "VMemory.txt", "Max heap size (bytes): " + max);
+fs.writeFile(__dirname + "/results/" + duration / 1000 + "VMemory.txt", "Max heap size (bytes): " + max);*/
 

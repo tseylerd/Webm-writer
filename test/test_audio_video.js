@@ -14,17 +14,16 @@ for (var j = 0; j < frames / 2; j++) { // add frames
 }
 var audioBuffer = fs.readFileSync(__dirname + "/sources/1.ogg");
 video.addAudioTrack(audioBuffer, duration);
-
 var usages = video.compile(); //make video and save
 video.save(__dirname + "/videos/" + duration / 1000 + "SecAudioVideo.webm");
 
-var max = 0;
+/*var max = 0;
 usages.map(function (e) {
     if (parseInt(e) > max)
         max = e;
 });
 
 fs.openSync(__dirname + "/results/" + duration / 1000 + "AVMemory.txt", "w");
-fs.writeFile(__dirname + "/results/" + duration / 1000 + "AVMemory.txt", "Max heap size (bytes): " + max);
+fs.writeFile(__dirname + "/results/" + duration / 1000 + "AVMemory.txt", "Max heap size (bytes): " + max);*/
 
 

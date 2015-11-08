@@ -8,13 +8,16 @@
 
 var atob = require('atob');
 
+var heapdump = require('heapdump');
+var snapshotNumber = 0;
 var test = true;
-var usages = [];
 var saveMemoryUsage = function () {
     if (!test)
         return;
-    var usage = process.memoryUsage();
-    usages.push(usage['heapUsed']);
+    snapshotNumber++;
+    heapdump.writeSnapshot(__dirname + "/../test/snapshots/" + Date.now() + '.heapsnapshot');
+    //var usage = process.memoryUsage();
+    //usages.push(usage['heapUsed']);
 };
 
 var MS_IN_SECOND = 1000;
@@ -67,7 +70,7 @@ var toFlatArray = function (arr, outBuffer) {
     if (outBuffer == null) {
         outBuffer = [];
     }
-    saveMemoryUsage();
+    //saveMemoryUsage();
     for (var i = 0; i < arr.length; i++) {
         if (typeof arr[i] == 'object') {
             toFlatArray(arr[i], outBuffer)
@@ -75,7 +78,7 @@ var toFlatArray = function (arr, outBuffer) {
             outBuffer.push(arr[i]);
         }
     }
-    saveMemoryUsage();
+    //saveMemoryUsage();
     return outBuffer;
 };
 
@@ -264,7 +267,7 @@ var generateEBML = function (ebmlObject) {
         ebml.push(numToBuffer(ebmlObject[i].id));
         ebml.push(bitsToBuffer(size));
         ebml.push(data);
-        saveMemoryUsage();
+        //saveMemoryUsage();
     }
     var buffer = toFlatArray(ebml);
     saveMemoryUsage();
@@ -630,7 +633,7 @@ var Video = function (width, height) {
         webp.type = FRAME_TYPE_VIDEO;
         this.duration += duration;
         this.videoFrames.push(webp);
-        saveMemoryUsage();
+        //saveMemoryUsage();
     };
     /**
      * Make video
@@ -641,7 +644,7 @@ var Video = function (width, height) {
         saveMemoryUsage();
         this.resultArray = this._toWebM();
         saveMemoryUsage();
-        return usages; //only for testing
+        return this.resultArray;
     };
     /**
      * @param {Buffer} buffer
@@ -656,7 +659,7 @@ var Video = function (width, height) {
         this.rate = vorbisFile.infoPacket.rate;
         this.codecPrivate = privateData;
         this.audioDuration = duration || vorbisFile.getDuration() * MS_IN_SECOND;
-        saveMemoryUsage();
+        //saveMemoryUsage();
     };
     /**
      * @param {String} file
@@ -721,7 +724,7 @@ var Video = function (width, height) {
 
             clusterNumber++;
             clusterDuration = this.frames[frameNumber - 1].timecode - clusterTimecode;
-            saveMemoryUsage();
+            //saveMemoryUsage();
             var cluster = {
                 "id": 0x1f43b675, // Cluster
                 "data": [
@@ -745,10 +748,11 @@ var Video = function (width, height) {
                         };
                     }))
             };
-            saveMemoryUsage();
+            //saveMemoryUsage();
             segment.data.push(cluster);
             clusterTimecode += clusterDuration;
         }
+        saveMemoryUsage();
         var position = 0;
         var cueNumber = 0;
         for (var i = 0; i < segment.data.length; i++) {

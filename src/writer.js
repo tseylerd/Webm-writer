@@ -8,18 +8,6 @@
 
 var atob = require('atob');
 
-var heapdump = require('heapdump');
-var snapshotNumber = 0;
-var test = true;
-var saveMemoryUsage = function () {
-    if (!test)
-        return;
-    snapshotNumber++;
-    heapdump.writeSnapshot(__dirname + "/../test/snapshots/" + Date.now() + '.heapsnapshot');
-    //var usage = process.memoryUsage();
-    //usages.push(usage['heapUsed']);
-};
-
 var MS_IN_SECOND = 1000;
 var CLUSTER_MAX_DURATION_MS = 30 * MS_IN_SECOND;
 var SEGMENT_INDEX = 1;
@@ -66,27 +54,40 @@ var EBML_HEADER = {
  * @param {Array} outBuffer
  * @returns {Array}
  */
-var toFlatArray = function (arr, outBuffer) {
-    if (outBuffer == null) {
-        outBuffer = [];
-    }
-    //saveMemoryUsage();
-    for (var i = 0; i < arr.length; i++) {
-        if (typeof arr[i] == 'object') {
-            toFlatArray(arr[i], outBuffer)
-        } else {
-            outBuffer.push(arr[i]);
-        }
-    }
-    //saveMemoryUsage();
+function toFlatArray(arr, outBuffer) {
+    if (!outBuffer)
+        outBuffer = new Array();
+    cycle(arr, outBuffer);
     return outBuffer;
 };
+
+function cycle(arr, outBuffer) {
+    var len = arr.length;
+    for (var i = 0; i < len; i++)
+        processObject(arr[i], outBuffer);
+}
+
+function processObject(obj, outBuffer) {
+    if (isObject(obj)) {
+        toFlatArray(obj, outBuffer)
+    } else {
+        push(outBuffer, obj);
+    }
+}
+
+function push(outBuffer, obj) {
+    outBuffer.push(obj);
+}
+
+function isObject(obj) {
+    return typeof obj == 'object';
+}
 
 /**
  * @param {Object} data
  * @returns {String}
  */
-var makeSimpleBlock = function (data) {
+function makeSimpleBlock(data) {
     var flags = 0;
     if (data.keyframe) flags |= 128;
     if (data.invisible) flags |= 8;
@@ -104,7 +105,7 @@ var makeSimpleBlock = function (data) {
  * @param {String} riff
  * @returns {Object}
  */
-var parseWebP = function (riff) {
+function parseWebP(riff) {
     var VP8 = riff.RIFF[0].WEBP[0];
 
     var frame_start = VP8.indexOf('\x9d\x01\x2a');
@@ -129,7 +130,7 @@ var parseWebP = function (riff) {
  * @param {String} string
  * @returns {Object}
  */
-var parseRIFF = function (string) {
+function parseRIFF(string) {
     var offset = 0;
     var chunks = new Object();
 
@@ -159,7 +160,7 @@ var parseRIFF = function (string) {
  * @param {Number} num
  * @returns {string}
  */
-var doubleToString64 = function (num) {
+function doubleToString64(num) {
     return [].slice.call(
         new Uint8Array(
             (
@@ -177,7 +178,7 @@ var doubleToString64 = function (num) {
  * @param {Number} num
  * @returns {string}
  */
-var doubleToString32 = function (num) {
+function doubleToString32(num) {
     return [].slice.call(
         new Uint8Array(
             (
@@ -195,7 +196,7 @@ var doubleToString32 = function (num) {
  * @param num
  * @returns {Uint8Array}
  */
-var numToBuffer = function (num) {
+function numToBuffer(num) {
     var parts = [];
     while (num > 0) {
         parts.push(num & 0xff);
@@ -209,7 +210,7 @@ var numToBuffer = function (num) {
  * @param {Number} size
  * @returns {Uint8Array}
  */
-var numToFixedBuffer = function (num, size) {
+function numToFixedBuffer(num, size) {
     var parts = new Uint8Array(size);
     for (var i = size - 1; i >= 0; i--) {
         parts[i] = num & 0xff;
@@ -222,7 +223,7 @@ var numToFixedBuffer = function (num, size) {
  * @param {String} str
  * @returns {Uint8Array}
  */
-var strToBuffer = function (str) {
+function strToBuffer(str) {
     var arr = new Uint8Array(str.length);
     for (var i = 0; i < str.length; i++) {
         arr[i] = str.charCodeAt(i)
@@ -234,7 +235,7 @@ var strToBuffer = function (str) {
  * @param {String} bits
  * @returns {Uint8Array}
  */
-var bitsToBuffer = function (bits) {
+function bitsToBuffer(bits) {
     var data = [];
     var pad = (bits.length % 8) ? (new Array(1 + 8 - (bits.length % 8))).join('0') : '';
     bits = pad + bits;
@@ -248,7 +249,7 @@ var bitsToBuffer = function (bits) {
  * @param {Object} ebmlObject
  * @returns {Uint8Array}
  */
-var generateEBML = function (ebmlObject) {
+function generateEBML(ebmlObject) {
     var ebml = [];
     for (var i = 0; i < ebmlObject.length; i++) {
         if (!('id' in ebmlObject[i])) {
@@ -270,7 +271,7 @@ var generateEBML = function (ebmlObject) {
         //saveMemoryUsage();
     }
     var buffer = toFlatArray(ebml);
-    saveMemoryUsage();
+   // saveMemoryUsage();
     return new Uint8Array(buffer);
 };
 
@@ -281,7 +282,7 @@ var generateEBML = function (ebmlObject) {
  * @param {String} privateData
  * @returns {Object}
  */
-var getTracks = function (width, height, rate, privateData) { // because video may contain only video or audio frames
+function getTracks(width, height, rate, privateData) { // because video may contain only video or audio frames
     if (rate && width) {
         return {
             "id": 0x1654ae6b, // Tracks
@@ -490,7 +491,7 @@ var getTracks = function (width, height, rate, privateData) { // because video m
  * @param {Number} duration
  * @returns {Object}
  */
-var getSegmentHeader = function(duration) {
+function getSegmentHeader(duration) {
     return {
         "id": 0x1549a966, // Info
         "data": [
@@ -520,7 +521,7 @@ var getSegmentHeader = function(duration) {
  * @param {Number} rate
  * @returns {Object}
  */
-var getStructureWithoutVideo = function(duration, privateData, rate) {
+function getStructureWithoutVideo(duration, privateData, rate) {
     return[
         EBML_HEADER,
         {
@@ -542,7 +543,7 @@ var getStructureWithoutVideo = function(duration, privateData, rate) {
  * @param {Number} rate
  * @returns {Object}
  */
-var getStructureWithVideo = function(width, height, duration, rate, privateData) {
+function getStructureWithVideo(width, height, duration, rate, privateData) {
     return [
         EBML_HEADER,
         {
@@ -571,7 +572,7 @@ var getStructureWithVideo = function(width, height, duration, rate, privateData)
  * @param {Number} rate
  * @returns {Object}
  */
-var getEbmlStructure = function (width, height, duration, privateData, rate) { // create mkv-specific ebml structure
+function getEbmlStructure(width, height, duration, privateData, rate) { // create mkv-specific ebml structure
     if (width && height) {
         return getStructureWithVideo(width, height, duration, rate, privateData);
     } else {
@@ -583,7 +584,7 @@ var getEbmlStructure = function (width, height, duration, privateData, rate) { /
  * @param {Array} audioFrames
  * @returns {Array}
  */
-var mergeSortedLists = function (videoFrames, audioFrames) { // merge frames by timecode
+function mergeSortedLists(videoFrames, audioFrames) { // merge frames by timecode
     var i = 0;
     var j = 0;
     var result = [];
@@ -617,7 +618,7 @@ var mergeSortedLists = function (videoFrames, audioFrames) { // merge frames by 
  * @param {Number} height
  * @constructor
  */
-var Video = function (width, height) {
+function Video(width, height) {
     this.frames = [];
     this.videoFrames = [];
     this.duration = 0;
@@ -641,9 +642,9 @@ var Video = function (width, height) {
      */
     this.compile = function () {
         this.frames = mergeSortedLists(this.videoFrames, this.audioFrames);
-        saveMemoryUsage();
+        //oryUsage();
         this.resultArray = this._toWebM();
-        saveMemoryUsage();
+        //saveMemoryUsage();
         return this.resultArray;
     };
     /**
@@ -671,7 +672,7 @@ var Video = function (width, height) {
             buffer[i] = this.resultArray[i];
         }
         fs.writeFile(file, buffer);
-        saveMemoryUsage();
+       // saveMemoryUsage();
     };
     this._toWebM = function () {
 
@@ -752,7 +753,7 @@ var Video = function (width, height) {
             segment.data.push(cluster);
             clusterTimecode += clusterDuration;
         }
-        saveMemoryUsage();
+        //saveMemoryUsage();
         var position = 0;
         var cueNumber = 0;
         for (var i = 0; i < segment.data.length; i++) {
@@ -767,6 +768,9 @@ var Video = function (width, height) {
                 segment.data[i] = data;
             }
         }
+        //this.frames = null;
+        //this.audioFrames = null;
+        //this.videoFrames = null;
         return generateEBML(ebml)
     };
 };

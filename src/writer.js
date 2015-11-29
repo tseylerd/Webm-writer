@@ -15,6 +15,7 @@ var CUES_INDEX = 2;
 var FRAME_TYPE_VIDEO = 0;
 var VIDEO_TRACK_NUMBER = 1;
 var AUDIO_TRACK_NUMBER = 2;
+var SIMPLE_BLOCK_ID = 0xa3;
 var EBML_HEADER = {
     "id": 0x1a45dfa3, // EBML
     "data": [
@@ -49,33 +50,12 @@ var EBML_HEADER = {
     ]
 };
 
-/**
- * @param {Object} data
- * @returns {String}
- */
-function makeSimpleBlock(data) {
-    var flags = 0;
-    if (data.keyframe) flags |= 128;
-    if (data.invisible) flags |= 8;
-    if (data.lacing) flags |= (data.lacing << 1);
-    if (data.discardable) flags |= 1;
-    if (data.trackNum > 127) {
-        throw "TrackNumber > 127 not supported";
-    }
-    return [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function (e) {
-            return String.fromCharCode(e)
-        }).join('') + data.frame.toString('binary');
-};
-
 function createFrame(buffer, timecode, trackNum) {
     var flags = 0;
     flags |= 128;
     var blockData = [trackNum | 0x80, timecode >> 8, timecode & 0xff, flags];
     pushAll(blockData, buffer);
-    var frame = new Object();
-    frame.timeCode = timecode;
-    frame.type = trackNum - 1;
-    return frame;
+    return new Uint8Array(blockData);
 };
 
 /**
@@ -225,10 +205,13 @@ function generateEBML(ebmlObject) {
             pushAll(test, ebmlObject[i]);
             continue;
         }
+
         var data = ebmlObject[i].data;
-        if (typeof data == 'object') data = generateEBML(data);
-        if (typeof data == 'number') data = ('size' in ebmlObject[i]) ? numToFixedBuffer(data, ebmlObject[i].size) : bitsToBuffer(data.toString(2));
-        if (typeof data == 'string') data = strToBuffer(data);
+        if (ebmlObject[i].id != SIMPLE_BLOCK_ID) {
+            if (typeof data == 'object') data = generateEBML(data);
+            if (typeof data == 'number') data = ('size' in ebmlObject[i]) ? numToFixedBuffer(data, ebmlObject[i].size) : bitsToBuffer(data.toString(2));
+            if (typeof data == 'string') data = strToBuffer(data);
+        }
         var len = data.size || data.byteLength || data.length;
         var zeroes = Math.ceil(Math.ceil(Math.log(len) / Math.log(2)) / 8);
         var size_str = len.toString(2);
@@ -705,16 +688,8 @@ function Video(width, height) {
                         "id": 0xe7 // Timecode
                     }
                 ].concat(clusterFrames.map(function (frame) {
-                        var block = makeSimpleBlock({
-                            discardable: 0,
-                            frame: frame.type == FRAME_TYPE_VIDEO ? frame.data.slice(4) : frame.data,
-                            invisible: 0,
-                            keyframe: 1,
-                            lacing: 0,
-                            trackNum: frame.type == FRAME_TYPE_VIDEO ? VIDEO_TRACK_NUMBER : AUDIO_TRACK_NUMBER,
-                            timecode: Math.round(frame.timecode - clusterTimecode)
-                        });
-                        return {
+                    var block = createFrame(frame.type == FRAME_TYPE_VIDEO ? frame.data.slice(4) : frame.data, Math.round(frame.timecode - clusterTimecode), frame.type == FRAME_TYPE_VIDEO ? VIDEO_TRACK_NUMBER : AUDIO_TRACK_NUMBER);
+                    return {
                             data: block,
                             id: 0xa3
                         };

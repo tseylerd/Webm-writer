@@ -6,7 +6,6 @@ var Video = require('../src/writer.js'); // load module
 var video = new Video(400, 400);
 var image1 = fs.readFileSync(__dirname + "/sources/1.webp");
 var image2 = fs.readFileSync(__dirname + "/sources/2.webp");
-//var images = [image1.toString('binary'), image2.toString('binary')];
 
 for (var j = 0; j < frames / 2; j++) { // add frames
     video.addVideoFrame(image1, 40);

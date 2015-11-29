@@ -311,7 +311,7 @@ var VorbisFile = function() {
             if (!timecodeSmallerThanMax)
                 break;
             result.push({
-                data : packages[j].data.toString('binary'),
+                data : packages[j].data,
                 timecode : packages[j].timecode/this.infoPacket.rate * MS_IN_SECOND
             });
         }

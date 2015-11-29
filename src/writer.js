@@ -64,32 +64,30 @@ function makeSimpleBlock(data) {
     }
     return [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function (e) {
             return String.fromCharCode(e)
-        }).join('') + data.frame;
+        }).join('') + data.frame.toString('binary');
+};
+
+function createFrame(buffer, timecode, trackNum) {
+    var flags = 0;
+    flags |= 128;
+    var blockData = [trackNum | 0x80, timecode >> 8, timecode & 0xff, flags];
+    pushAll(blockData, buffer);
+    var frame = new Object();
+    frame.timeCode = timecode;
+    frame.type = trackNum - 1;
+    return frame;
 };
 
 /**
- * @param {String} riff
+ * @param {Array} buffer
  * @returns {Object}
  */
-function parseWebP(riff) {
-    var VP8 = riff.RIFF[0].WEBP[0];
-
-    var frame_start = VP8.indexOf('\x9d\x01\x2a');
-    for (var i = 0, c = []; i < 4; i++) {
-        c[i] = VP8.charCodeAt(frame_start + 3 + i);
-    }
-
-    var width, height, tmp;
-    tmp = (c[1] << 8) | c[0];
-    width = tmp & 0x3FFF;
-    tmp = (c[3] << 8) | c[2];
-    height = tmp & 0x3FFF;
-    return {
-        width: width,
-        height: height,
-        data: VP8,
-        riff: riff
-    }
+function parseWebP(buffer) {
+    var withOutHeader = buffer.slice(12);
+    var index = 0;
+    while (String.fromCharCode(withOutHeader[index]) != ' ')
+        index++;
+    return { data : withOutHeader.slice(index+1) };
 };
 
 /**
@@ -213,8 +211,6 @@ function bitsToBuffer(bits) {
 
 function pushAll(array, toPush) {
     for (var i = 0; i < toPush.length; i++) {
-        if (isObject(toPush[i]))
-            console.log("Uau")
         array.push(toPush[i]);
     }
 }
@@ -600,7 +596,8 @@ function Video(width, height) {
      * @param {Number} duration
      */
     this.addVideoFrame = function (frame, duration) {
-        var webp = parseWebP(parseRIFF(atob(frame)));
+        var webp = parseWebP(frame);
+        //var block = createFrame(webp.slice(4), this.duration, VIDEO_TRACK_NUMBER);
         webp.timecode = this.duration;
         webp.type = FRAME_TYPE_VIDEO;
         this.duration += duration;
@@ -619,7 +616,7 @@ function Video(width, height) {
         return this.resultArray;
     };
     /**
-     * @param {Buffer} buffer
+     * @param {Array} buffer
      * @param {Number} duration
      */
     this.addAudioTrack = function (buffer, duration) {
@@ -628,6 +625,9 @@ function Video(width, height) {
         var vorbisFile = parser.parse();
         var privateData = vorbisFile.getCodecPrivateForMatroska();
         this.audioFrames = vorbisFile.getWebMSpecificAudioPackets(duration);
+        //for (var i = 0; i < this.audioFrames.length; i++) {
+          //  this.audioFrames[i] = createFrame(this.audioFrames[i].data, this.audioFrames[i].timeCode, AUDIO_TRACK_NUMBER);
+        //}
         this.rate = vorbisFile.infoPacket.rate;
         this.codecPrivate = privateData;
         this.audioDuration = duration || vorbisFile.getDuration() * MS_IN_SECOND;

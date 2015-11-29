@@ -50,40 +50,6 @@ var EBML_HEADER = {
 };
 
 /**
- * @param {Array} arr
- * @param {Array} outBuffer
- * @returns {Array}
- */
-function toFlatArray(arr, outBuffer) {
-    if (!outBuffer)
-        outBuffer = new Array();
-    cycle(arr, outBuffer);
-    return outBuffer;
-};
-
-function cycle(arr, outBuffer) {
-    var len = arr.length;
-    for (var i = 0; i < len; i++)
-        processObject(arr[i], outBuffer);
-}
-
-function processObject(obj, outBuffer) {
-    if (isObject(obj)) {
-        toFlatArray(obj, outBuffer)
-    } else {
-        push(outBuffer, obj);
-    }
-}
-
-function push(outBuffer, obj) {
-    outBuffer.push(obj);
-}
-
-function isObject(obj) {
-    return typeof obj == 'object';
-}
-
-/**
  * @param {Object} data
  * @returns {String}
  */
@@ -245,15 +211,22 @@ function bitsToBuffer(bits) {
     return new Uint8Array(data);
 };
 
+function pushAll(array, toPush) {
+    for (var i = 0; i < toPush.length; i++) {
+        if (isObject(toPush[i]))
+            console.log("Uau")
+        array.push(toPush[i]);
+    }
+}
 /**
  * @param {Object} ebmlObject
  * @returns {Uint8Array}
  */
 function generateEBML(ebmlObject) {
-    var ebml = [];
+    var test = new Array()
     for (var i = 0; i < ebmlObject.length; i++) {
         if (!('id' in ebmlObject[i])) {
-            ebml.push(ebmlObject[i]);
+            pushAll(test, ebmlObject[i]);
             continue;
         }
         var data = ebmlObject[i].data;
@@ -265,14 +238,12 @@ function generateEBML(ebmlObject) {
         var size_str = len.toString(2);
         var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
         var size = (new Array(zeroes)).join('0') + '1' + padded;
-        ebml.push(numToBuffer(ebmlObject[i].id));
-        ebml.push(bitsToBuffer(size));
-        ebml.push(data);
-        //saveMemoryUsage();
+        pushAll(test, numToBuffer(ebmlObject[i].id));
+        pushAll(test, bitsToBuffer(size));
+        pushAll(test, data);
     }
-    var buffer = toFlatArray(ebml);
-   // saveMemoryUsage();
-    return new Uint8Array(buffer);
+
+    return new Uint8Array(test);
 };
 
 /**
@@ -749,11 +720,11 @@ function Video(width, height) {
                         };
                     }))
             };
-            //saveMemoryUsage();
+
             segment.data.push(cluster);
             clusterTimecode += clusterDuration;
         }
-        //saveMemoryUsage();
+
         var position = 0;
         var cueNumber = 0;
         for (var i = 0; i < segment.data.length; i++) {
@@ -768,9 +739,7 @@ function Video(width, height) {
                 segment.data[i] = data;
             }
         }
-        //this.frames = null;
-        //this.audioFrames = null;
-        //this.videoFrames = null;
+
         return generateEBML(ebml)
     };
 };

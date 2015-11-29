@@ -6,8 +6,6 @@
  * Then we save cue points position in embl and then generate final buffer with webm file data.
  */
 
-var atob = require('atob');
-
 var MS_IN_SECOND = 1000;
 var CLUSTER_MAX_DURATION_MS = 30 * MS_IN_SECOND;
 var SEGMENT_INDEX = 1;
@@ -67,37 +65,7 @@ function parseWebP(buffer) {
     var index = 0;
     while (String.fromCharCode(withOutHeader[index]) != ' ')
         index++;
-    return { data : withOutHeader.slice(index+1) };
-};
-
-/**
- * @param {String} string
- * @returns {Object}
- */
-function parseRIFF(string) {
-    var offset = 0;
-    var chunks = new Object();
-
-    while (offset < string.length) {
-        var id = string.substr(offset, 4);
-        chunks[id] = chunks[id] || [];
-        if (id == 'RIFF' || id == 'LIST') {
-            var len = parseInt(string.substr(offset + 4, 4).split('').map(function (i) {
-                var unpadded = i.charCodeAt(0).toString(2);
-                return (new Array(8 - unpadded.length + 1)).join('0') + unpadded
-            }).join(''), 2);
-            var data = string.substr(offset + 4 + 4, len);
-            offset += 4 + 4 + len;
-            chunks[id].push(parseRIFF(data));
-        } else if (id == 'WEBP') {
-            chunks[id].push(string.substr(offset + 8));
-            offset = string.length;
-        } else {
-            chunks[id].push(string.substr(offset + 4));
-            offset = string.length;
-        }
-    }
-    return chunks;
+    return { data : withOutHeader.slice(index+1) }; //todo: add extended file type support
 };
 
 /**
@@ -212,11 +180,7 @@ function generateEBML(ebmlObject) {
             if (typeof data == 'number') data = ('size' in ebmlObject[i]) ? numToFixedBuffer(data, ebmlObject[i].size) : bitsToBuffer(data.toString(2));
             if (typeof data == 'string') data = strToBuffer(data);
         }
-        var len = data.size || data.byteLength || data.length;
-        var zeroes = Math.ceil(Math.ceil(Math.log(len) / Math.log(2)) / 8);
-        var size_str = len.toString(2);
-        var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
-        var size = (new Array(zeroes)).join('0') + '1' + padded;
+        var size = calculateSize(data);
         pushAll(test, numToBuffer(ebmlObject[i].id));
         pushAll(test, bitsToBuffer(size));
         pushAll(test, data);
@@ -224,6 +188,15 @@ function generateEBML(ebmlObject) {
 
     return new Uint8Array(test);
 };
+
+function calculateSize(data) {
+    var len = data.length;
+    var zeroes = Math.ceil(Math.ceil(Math.log(len) / Math.log(2)) / 8);
+    var size_str = len.toString(2);
+    var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
+    var size = (new Array(zeroes)).join('0') + '1' + padded;
+    return size;
+}
 
 /**
  * @param {Number} width
@@ -580,12 +553,10 @@ function Video(width, height) {
      */
     this.addVideoFrame = function (frame, duration) {
         var webp = parseWebP(frame);
-        //var block = createFrame(webp.slice(4), this.duration, VIDEO_TRACK_NUMBER);
         webp.timecode = this.duration;
         webp.type = FRAME_TYPE_VIDEO;
         this.duration += duration;
         this.videoFrames.push(webp);
-        //saveMemoryUsage();
     };
     /**
      * Make video
@@ -593,9 +564,7 @@ function Video(width, height) {
      */
     this.compile = function () {
         this.frames = mergeSortedLists(this.videoFrames, this.audioFrames);
-        //oryUsage();
         this.resultArray = this._toWebM();
-        //saveMemoryUsage();
         return this.resultArray;
     };
     /**
@@ -608,13 +577,9 @@ function Video(width, height) {
         var vorbisFile = parser.parse();
         var privateData = vorbisFile.getCodecPrivateForMatroska();
         this.audioFrames = vorbisFile.getWebMSpecificAudioPackets(duration);
-        //for (var i = 0; i < this.audioFrames.length; i++) {
-          //  this.audioFrames[i] = createFrame(this.audioFrames[i].data, this.audioFrames[i].timeCode, AUDIO_TRACK_NUMBER);
-        //}
         this.rate = vorbisFile.infoPacket.rate;
         this.codecPrivate = privateData;
         this.audioDuration = duration || vorbisFile.getDuration() * MS_IN_SECOND;
-        //saveMemoryUsage();
     };
     /**
      * @param {String} file
@@ -626,7 +591,6 @@ function Video(width, height) {
             buffer[i] = this.resultArray[i];
         }
         fs.writeFile(file, buffer);
-       // saveMemoryUsage();
     };
     this._toWebM = function () {
 
@@ -679,7 +643,6 @@ function Video(width, height) {
 
             clusterNumber++;
             clusterDuration = this.frames[frameNumber - 1].timecode - clusterTimecode;
-            //saveMemoryUsage();
             var cluster = {
                 "id": 0x1f43b675, // Cluster
                 "data": [
@@ -691,7 +654,7 @@ function Video(width, height) {
                     var block = createFrame(frame.type == FRAME_TYPE_VIDEO ? frame.data.slice(4) : frame.data, Math.round(frame.timecode - clusterTimecode), frame.type == FRAME_TYPE_VIDEO ? VIDEO_TRACK_NUMBER : AUDIO_TRACK_NUMBER);
                     return {
                             data: block,
-                            id: 0xa3
+                            id: SIMPLE_BLOCK_ID
                         };
                     }))
             };
@@ -709,7 +672,7 @@ function Video(width, height) {
                 cues.data[cueNumber++].data[1].data[1].data = position;
             }
             var data = generateEBML([segment.data[i]]);
-            position += data.size || data.byteLength || data.length;
+            position += data.length;
             if (i != 2) {
                 segment.data[i] = data;
             }

@@ -6,9 +6,6 @@
  * Then we save cue points position in embl and then generate final buffer with webm file data.
  */
 
-//todo: support only video
-//todo: support only audio
-//todo: cue points
 //todo: write by add
 Array.prototype.insert = function (index, item) {
     this.splice(index, 0, item);
@@ -51,11 +48,45 @@ var CODEC_PRIVATE_ID = 0x63A2;
 var RATE_ID = 0xB5;
 var CLUSTER_ID = 0x1f43b675;
 var CLUSTER_TIMECODE_ID = 0xe7;
+var CUES_ID = 0x1c53bb6b;
+var CUE_POINT_ID = 0xbb;
+var CUE_TIME_ID = 0xb3;
+var CUE_TRACK_POSITION_ID = 0xb7;
+var CUE_TRACK_ID = 0xf7;
+var CUE_CLUSTER_POSITION_ID = 0xf1;
+
+
+var positions = [];
+var toFillIndicies = [];
+var fullLength = 0;
+
+function DataIterator(getNext, hasNext) {
+    this.getNext = getNext();
+    this.hasNext = hasNext();
+}
 
 function write(resultBuffer, duration, width, height, privateData, rate, frames) {
+    if (!width && !privateData)
+        throw new Error("Video or audio must exists");
+
     writeEbmlHeader(resultBuffer);
-    executeAndWriteIdAndSize(resultBuffer, writeSegment, SEGMENT_ID, [duration, width, height, privateData, rate, frames]);
+    var segmentHeaderLength = executeAndWriteIdAndSize(resultBuffer, writeSegment, SEGMENT_ID, [duration, width, height, privateData, rate, frames]);
+    fillCues(resultBuffer, segmentHeaderLength)
     return resultBuffer;
+}
+
+function fillCues(resultBuffer, segmentHeaderLength) {
+    for (var i = 0; i < positions.length; i++) {
+        var position = positions[i].position + segmentHeaderLength + fullLength;
+        var start = toFillIndicies[i] + segmentHeaderLength;
+        fillAll(resultBuffer, numToFixedBuffer(position, 8), start);
+    }
+}
+
+function fillAll(buffer, toFill, start) {
+    for (var i = start; i < toFill.length + start; i++) {
+        buffer[i] = toFill[i-start];
+    }
 }
 
 function writeSegment(resultBuffer, params) {
@@ -67,8 +98,39 @@ function writeSegment(resultBuffer, params) {
     var frames = params[5];
     writeSegmentHeader(resultBuffer, duration);
     executeAndWriteIdAndSize(resultBuffer, writeTracks, TRACKS_ID, [width, height, privateData, rate]);
-    writeClusters(resultBuffer, frames);
-   // writeCues(resultBuffer); //todo
+    var clustersBuffer = new Array();
+    writeClusters(clustersBuffer, frames);
+    writeCues(resultBuffer);
+    fullLength = resultBuffer.length;
+    pushAll(resultBuffer, clustersBuffer);
+}
+
+function writeCues(resultBuffer) {
+    var headerSize = executeAndWriteIdAndSize(resultBuffer, writeCuesData, CUES_ID);
+    for (var i = 0; i < toFillIndicies.length; i++) {
+        toFillIndicies[i] += headerSize;
+    }
+}
+
+function writeCuesData(resultBuffer) {
+    for (var i = 0; i < positions.length; i++) {
+        var headerSize = executeAndWriteIdAndSize(resultBuffer, writeCuePoint, CUE_POINT_ID, [i]);
+        toFillIndicies[i] += headerSize;
+    }
+}
+
+function writeCuePoint(resultBuffer, params) {
+    var cueIndex = params[0];
+    pushAll(resultBuffer, createSimpleBuffer(CUE_TIME_ID, Math.round(positions[cueIndex].timecode)));
+    toFillIndicies[cueIndex] += executeAndWriteIdAndSize(resultBuffer, writeCueTrackPosition, CUE_TRACK_POSITION_ID, [cueIndex]);
+}
+
+function writeCueTrackPosition(resultBuffer, params) {
+    var index = params[0];
+    pushAll(resultBuffer, createSimpleBuffer(CUE_TRACK_ID, positions[index].trackNumber));
+    pushAll(resultBuffer, createSimpleBuffer(CUE_CLUSTER_POSITION_ID, numToFixedBuffer(0, 8)));
+    var toBeFilledIndex = resultBuffer.length - 8;
+    toFillIndicies.push(toBeFilledIndex);
 }
 
 function writeClusters(resultBuffer, frames) {
@@ -78,9 +140,15 @@ function writeClusters(resultBuffer, frames) {
         var clusterFrames = [];
         var clusterDuration = 0;
 
+        var containsVideoFrame = false;
         do {
             clusterFrames.push(frames[frameNumber]);
+            if (frames[frameNumber].type == FRAME_TYPE_VIDEO)
+                containsVideoFrame = true;
         } while (++frameNumber < frames.length && frames[frameNumber].timecode - clusterTimecode < CLUSTER_MAX_DURATION_MS);
+
+        if (containsVideoFrame)
+            positions.push({trackNumber : clusterFrames[0].type == FRAME_TYPE_VIDEO ? VIDEO_TRACK_NUMBER : AUDIO_TRACK_NUMBER, position : resultBuffer.length, timecode : clusterFrames[0].timecode});
 
         clusterDuration = frames[frameNumber - 1].timecode - clusterTimecode;
         executeAndWriteIdAndSize(resultBuffer, writeCluster, CLUSTER_ID, [Math.round(clusterTimecode), clusterFrames]);
@@ -102,8 +170,10 @@ function writeTracks(resultBuffer, params) {
     var height = params[1];
     var codecPrivate = params[2];
     var rate = params[3];
-    writeVideoTrack(resultBuffer, width, height);
-    writeAudioTrack(resultBuffer, codecPrivate, rate);
+    if (width)
+        writeVideoTrack(resultBuffer, width, height);
+    if (rate)
+        writeAudioTrack(resultBuffer, codecPrivate, rate);
 }
 
 function writeVideoTrack(resultBuffer, width, height) {
@@ -151,7 +221,6 @@ function writeAudioEntry(resultBuffer, params) {
 };
 
 function writeSegmentHeader(resultBuffer, duration) {
-    //writeSegmentHeaderData(resultBuffer, [duration]);
     executeAndWriteIdAndSize(resultBuffer, writeSegmentHeaderData, SEGMENT_HEADER_INFO_ID, [duration]);
 }
 
@@ -171,9 +240,14 @@ function writeEbmlHeader(resultBuffer) {
 function executeAndWriteIdAndSize(resultBuffer, func, id, params) {
     var position = resultBuffer.length;
     func(resultBuffer, params);
-    var len = resultBuffer.length - position;
-    writeSizeToBuffer(position, resultBuffer, len);
+    var length = resultBuffer.length - position;
+    if (length == 0)
+        return;
+
+    var before = resultBuffer.length;
+    writeSizeToBuffer(position, resultBuffer, length);
     writeId(position, resultBuffer, id);
+    return resultBuffer.length - before;
 }
 
 function writeEbmlHeaderData(result) {
@@ -403,6 +477,9 @@ function Video(width, height) {
      * @param {Number} duration
      */
     this.addVideoFrame = function (frame, duration) {
+        if (!this.duration)
+            this.duration = 0;
+
         var webp = parseWebP(frame);
         webp.timecode = this.duration;
         webp.type = FRAME_TYPE_VIDEO;
@@ -415,6 +492,11 @@ function Video(width, height) {
      */
     this.compile = function () {
         this.frames = mergeSortedLists(this.videoFrames, this.audioFrames);
+        if (this.audioDuration && this.duration) {
+            this.duration = Math.max(this.audioDuration, this.duration);
+        } else if (this.audioDuration) {
+            this.duration = this.audioDuration;
+        }
         this.resultArray = this._toWebM();
         return this.resultArray;
     };
@@ -444,7 +526,7 @@ function Video(width, height) {
         fs.writeFile(file, buffer);
     };
     this._toWebM = function() {
-        return write(new Array(), Math.max(this.duration, this.audioDuration), this.width, this.height, this.codecPrivate, this.rate, this.frames);
+        return write(new Array(), this.duration, this.width, this.height, this.codecPrivate, this.rate, this.frames);
     }
 };
 

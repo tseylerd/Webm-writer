@@ -6,7 +6,6 @@
  * Then we save cue points position in embl and then generate final buffer with webm file data.
  */
 
-//todo: write by add
 Array.prototype.insert = function (index, item) {
     this.splice(index, 0, item);
 };
@@ -100,7 +99,10 @@ function writeSegment(resultBuffer, params) {
     executeAndWriteIdAndSize(resultBuffer, writeTracks, TRACKS_ID, [width, height, privateData, rate]);
     var clustersBuffer = new Array();
     writeClusters(clustersBuffer, frames);
-    writeCues(resultBuffer);
+
+    if (width)
+        writeCues(resultBuffer);
+
     fullLength = resultBuffer.length;
     pushAll(resultBuffer, clustersBuffer);
 }
@@ -238,6 +240,7 @@ function writeEbmlHeader(resultBuffer) {
 }
 
 function executeAndWriteIdAndSize(resultBuffer, func, id, params) {
+    writeId(resultBuffer, id);
     var position = resultBuffer.length;
     func(resultBuffer, params);
     var length = resultBuffer.length - position;
@@ -246,7 +249,6 @@ function executeAndWriteIdAndSize(resultBuffer, func, id, params) {
 
     var before = resultBuffer.length;
     writeSizeToBuffer(position, resultBuffer, length);
-    writeId(position, resultBuffer, id);
     return resultBuffer.length - before;
 }
 
@@ -401,15 +403,9 @@ function writeSizeToBuffer(position, buffer, len) {
     }
 }
 
-function writeId(position, buffer, id) {
+function writeId(buffer, id) {
     var posBuffer = numToBuffer(id);
-    insertAll(buffer, posBuffer, position);
-}
-
-function insertAll(array, toInsert, position) {
-    for (var i = 0; i < toInsert.length; i++) {
-        array.insert(position++, toInsert[i]);
-    }
+    pushAll(buffer, posBuffer);
 }
 
 function pushAll(array, toPush) {

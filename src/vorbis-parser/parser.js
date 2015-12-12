@@ -74,8 +74,17 @@ var getIntFrom = function(data, start) {
  * @param {Number} len
  * @returns {String}
  */
+
+function arrayToBinaryString(array, start, end) {
+    var str = "";
+    for (var i=start; i<end; i++) {
+        str += String.fromCharCode(array[i]);
+    }
+    return str;
+}
+
 var getString = function(data, offset, len) {
-    return data.toString('utf-8', offset, offset + len)
+    return arrayToBinaryString(data, offset, offset + len);
 };
 
 /**
@@ -98,7 +107,7 @@ var getDataSize = function(buffer) {
  * @returns {Buffer}
  */
 var readAllBytes = function(dataIterator, length) {
-    var result = new Buffer(length);
+    var result = new Uint8Array(length);
     for (var i = 0; i < length; i++) {
         result[i] = dataIterator.getNext();
     }
@@ -165,9 +174,13 @@ function PacketReader(dataIterator) {
         while (packet.continueOnNextPage) {
             this._page = readPage(this._dataIterator);
             var newPacket = this._page.getNextPacket();
-            var newData = new Buffer(data.length + newPacket.data.length);
-            data.copy(newData, 0, 0, data.length);
-            newPacket.data.copy(newData, data.length, 0, newPacket.data.length);
+            var newData = new Uint8Array(data.length + newPacket.data.length);
+            for (var j = 0; j < data.length; j++){
+                newData[j] = data[j];
+            }
+            for (var j = data.length; j < data.length + newPacket.data.length; j++){
+                newData[j] = newPacket.data[j - data.length];
+            }
             data = newData;
             packet.continueOnNextPage = newPacket.continueOnNextPage;
         }
@@ -210,11 +223,14 @@ function Page() {
                 continueOnNextPage = true;
         }
 
-        var packetData = new Buffer(packetSize);
+        var packetData = new Uint8Array(packetSize);
         for (var i = this.currentSegment; i < this.currentSegment + packetSegments; i++) {
             var size = this.segments[i];
             var offset = (i - this.currentSegment) * 255;
-            this.data.copy(packetData, offset, this.currentOffset + offset, this.currentOffset + offset + size);
+            for (var j = offset; j < offset + size; j++ ) {
+                packetData[j] = this.data[this.currentOffset + offset + j];
+            }
+           // this.data.copy(packetData, offset, this.currentOffset + offset, this.currentOffset + offset + size);
         }
 
         var packet = new Object();
@@ -260,7 +276,7 @@ var VorbisFile = function() {
     };
     this.getCodecPrivateForMatroska = function() {
         var length = this.commentsPacket.data.length + this.infoPacket.data.length + this.setupPacket.data.length + 3;
-        var buffer = new Buffer(length);
+        var buffer = new Uint8Array(length);
         var position = 0;
         buffer[position++] = 2;
         buffer[position++] = this.infoPacket.data.length;
@@ -274,7 +290,7 @@ var VorbisFile = function() {
         for (var i = 0; i < this.setupPacket.data.length; i++) {
             buffer[position++] = this.setupPacket.data[i];
         }
-        return buffer.toString('binary');
+        return arrayToBinaryString(buffer, 0, buffer.length);
     };
     this._checkDuration = function(currentDuration, maxDuration) {
         if (maxDuration) {
@@ -311,7 +327,7 @@ var VorbisFile = function() {
             if (!timecodeSmallerThanMax)
                 break;
             result.push({
-                data : packages[j].data.toString('binary'),
+                data : arrayToBinaryString(packages[j].data, 0, packages[j].data.length),
                 timecode : packages[j].timecode/this.infoPacket.rate * MS_IN_SECOND
             });
         }
@@ -374,8 +390,6 @@ var Parser = function (buffer) {
         return this._vorbisFile;
     };
 };
-
-module.exports = Parser;
 /**
  * reading file
  */

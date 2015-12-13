@@ -27,7 +27,7 @@
         }
         function recievedAudio() {
             audioBuffer = reader.result;
-            var videoWriter = new Writer.Video(400, 400);
+            var videoWriter = new Video(400, 400);
             for (var i = 0; i < 120 * 1000 / 40; i++) {
                 videoWriter.addVideoFrame(videoString, 40)
             }

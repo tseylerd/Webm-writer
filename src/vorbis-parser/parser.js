@@ -228,9 +228,8 @@ function Page() {
             var size = this.segments[i];
             var offset = (i - this.currentSegment) * 255;
             for (var j = offset; j < offset + size; j++ ) {
-                packetData[j] = this.data[this.currentOffset + offset + j];
+                packetData[j] = this.data[this.currentOffset + j];
             }
-           // this.data.copy(packetData, offset, this.currentOffset + offset, this.currentOffset + offset + size);
         }
 
         var packet = new Object();
@@ -381,6 +380,7 @@ var Parser = function (buffer) {
         //setup packet
         var setupPacket = this._packetReader.getNextPacket();
         setupPacket.numberOfCodeblocks = setupPacket.data[8];
+        console.log(setupPacket.data)
         this._vorbisFile.setSetupPacket(setupPacket);
         //audio
         while (this._packetReader.hasNextPacket()) {

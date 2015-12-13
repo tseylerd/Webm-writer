@@ -33,7 +33,7 @@
             }
             videoWriter.addAudioTrack(new Uint8Array(audioBuffer), 120 * 1000);
             var blob = videoWriter.compile();
-            saveData(blob, "videos/video.webm")
+            saveData(blob, "video.webm")
         }
         var saveData = (function () {
             var a = document.createElement("a");

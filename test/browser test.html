@@ -33,6 +33,8 @@
             }
             videoWriter.addAudioTrack(new Uint8Array(audioBuffer), 120 * 1000);
             var blob = videoWriter.compile();
+            var url = webkitURL.createObjectURL(blob);
+            document.getElementById('awesome').src = url;
             saveData(blob, "video.webm")
         }
         var saveData = (function () {

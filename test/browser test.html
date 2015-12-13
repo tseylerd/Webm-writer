@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test</title>
+</head>
+<script src="../src/writer.js"></script>
+<script src="../src/vorbis-parser/parser.js"></script>
+<script>
+    function loadFile() {
+        var reader = new FileReader();
+
+        var video = document.getElementById('video').files[0];
+        var audio = document.getElementById('audio').files[0];
+
+        reader.onload = receivedVideo;
+        reader.readAsBinaryString(video);
+
+        var videoString, audioBuffer;
+
+        function receivedVideo() {
+            videoString = reader.result.toString();
+
+            reader = new FileReader();
+            reader.onload = recievedAudio;
+            reader.readAsArrayBuffer(audio);
+        }
+        function recievedAudio() {
+            audioBuffer = reader.result;
+            var videoWriter = new Writer.Video(400, 400);
+            for (var i = 0; i < 120 * 1000 / 40; i++) {
+                videoWriter.addVideoFrame(videoString, 40)
+            }
+            videoWriter.addAudioTrack(new Uint8Array(audioBuffer), 120 * 1000);
+            var blob = videoWriter.compile();
+            saveData(blob, "videos/video.webm")
+        }
+        var saveData = (function () {
+            var a = document.createElement("a");
+            document.body.appendChild(a);
+            a.style = "display: none";
+            return function (blob, fileName) {
+                url = window.URL.createObjectURL(blob);
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            };
+        }());
+    }
+</script>
+<body>
+    <form action='#' onsubmit="return false;">
+        <input type="file" id="video">
+        <input type="file" id="audio">
+    <input type='button' id='btnLoad' value='Load' onclick='loadFile();'>
+    </form>
+    <video id="awesome" width="400" height="400" controls autoplay loop></video>
+</body>
+</html>
